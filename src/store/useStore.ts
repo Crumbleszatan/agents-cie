@@ -91,6 +91,12 @@ interface AppState {
   // Onboarding
   isOnboarded: boolean;
   setOnboarded: (onboarded: boolean) => void;
+
+  // DB identifiers (set after auth)
+  currentOrgId: string | null;
+  setCurrentOrgId: (id: string | null) => void;
+  currentProjectId: string | null;
+  setCurrentProjectId: (id: string | null) => void;
 }
 
 function createDefaultStory(): UserStory {
@@ -361,4 +367,10 @@ export const useStore = create<AppState>((set, get) => ({
   // Onboarding
   isOnboarded: false,
   setOnboarded: (onboarded) => set({ isOnboarded: onboarded }),
+
+  // DB identifiers
+  currentOrgId: null,
+  setCurrentOrgId: (id) => set({ currentOrgId: id }),
+  currentProjectId: null,
+  setCurrentProjectId: (id) => set({ currentProjectId: id }),
 }));

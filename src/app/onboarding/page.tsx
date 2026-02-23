@@ -3,12 +3,30 @@
 import { createClient } from "@/lib/supabase/client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { Zap, Building2, ArrowRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Zap, Building2, ArrowRight, FolderKanban, Globe,
+  GitBranch, LayoutGrid, Check,
+} from "lucide-react";
+
+type Step = "organization" | "project";
 
 export default function OnboardingPage() {
+  const [step, setStep] = useState<Step>("organization");
+  // Organization
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
+  const [orgId, setOrgId] = useState<string | null>(null);
+  // Project
+  const [projectName, setProjectName] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [gitProvider, setGitProvider] = useState("");
+  const [gitRepoUrl, setGitRepoUrl] = useState("");
+  const [jiraKey, setJiraKey] = useState("");
+  const [jiraBaseUrl, setJiraBaseUrl] = useState("");
+  const [frontOfficeUrl, setFrontOfficeUrl] = useState("");
+  const [backOfficeUrl, setBackOfficeUrl] = useState("");
+  // UI
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -63,6 +81,45 @@ export default function OnboardingPage() {
         return;
       }
 
+      setOrgId(data.organization.id);
+      setStep("project");
+      setLoading(false);
+    } catch (err: any) {
+      setError(err.message || "Erreur réseau");
+      setLoading(false);
+    }
+  };
+
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organization_id: orgId,
+          name: projectName,
+          website_url: websiteUrl || null,
+          git_provider: gitProvider || null,
+          git_repo_url: gitRepoUrl || null,
+          atlassian_project_key: jiraKey || null,
+          atlassian_base_url: jiraBaseUrl || null,
+          front_office_url: frontOfficeUrl || null,
+          back_office_url: backOfficeUrl || null,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Erreur lors de la création du projet");
+        setLoading(false);
+        return;
+      }
+
       router.push("/");
       router.refresh();
     } catch (err: any) {
@@ -71,95 +128,294 @@ export default function OnboardingPage() {
     }
   };
 
+  const stepsConfig = [
+    { key: "organization" as const, label: "Organisation", icon: Building2 },
+    { key: "project" as const, label: "Projet", icon: FolderKanban },
+  ];
+  const currentStepIndex = stepsConfig.findIndex((s) => s.key === step);
+
   return (
     <div className="min-h-screen bg-[#fafafa] flex items-center justify-center p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-[400px]"
+        className="w-full max-w-[440px]"
       >
         <div className="text-center mb-8">
           <div className="w-12 h-12 bg-foreground rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Zap className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight">
-            Bienvenue sur Agen.cy
-          </h1>
+          <h1 className="text-xl font-bold tracking-tight">Bienvenue sur Agen.cy</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Créez votre organisation pour commencer
+            {step === "organization"
+              ? "Créez votre organisation pour commencer"
+              : "Configurez votre premier projet"}
           </p>
         </div>
 
-        <div className="panel shadow-soft p-6">
-          <form onSubmit={handleCreateOrg} className="space-y-4">
-            <p className="text-xs text-muted-foreground">
-              Une organisation regroupe votre équipe et vos projets.
-              Vous en serez l&apos;administrateur.
-            </p>
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                Nom de l&apos;organisation
-              </label>
-              <div className="relative">
-                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={orgName}
-                  onChange={(e) => {
-                    setOrgName(e.target.value);
-                    setOrgSlug(generateSlug(e.target.value));
-                  }}
-                  placeholder="Mon Agence"
-                  className="input-clean w-full pl-10"
-                  required
-                  autoFocus
-                />
+        {/* Steps indicator */}
+        <div className="flex items-center justify-center gap-2 mb-6">
+          {stepsConfig.map((s, i) => {
+            const Icon = s.icon;
+            const isActive = i === currentStepIndex;
+            const isDone = i < currentStepIndex;
+            return (
+              <div key={s.key} className="flex items-center">
+                <div
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    isActive
+                      ? "bg-foreground text-white"
+                      : isDone
+                      ? "bg-foreground/10 text-foreground"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {isDone ? <Check className="w-3 h-3" /> : <Icon className="w-3 h-3" />}
+                  {s.label}
+                </div>
+                {i < stepsConfig.length - 1 && (
+                  <div className={`w-4 h-px mx-1 ${isDone ? "bg-foreground" : "bg-border"}`} />
+                )}
               </div>
-            </div>
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                Slug (URL)
-              </label>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  agency.app/
-                </span>
-                <input
-                  type="text"
-                  value={orgSlug}
-                  onChange={(e) => setOrgSlug(generateSlug(e.target.value))}
-                  placeholder="mon-agence"
-                  className="input-clean flex-1"
-                  required
-                />
-              </div>
-            </div>
+            );
+          })}
+        </div>
 
-            {error && (
-              <motion.p
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-xs text-error bg-red-50 px-3 py-2 rounded-lg"
+        <div className="panel shadow-soft p-6">
+          <AnimatePresence mode="wait">
+            {/* ─── STEP 1: ORGANIZATION ─── */}
+            {step === "organization" && (
+              <motion.div
+                key="organization"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
               >
-                {error}
-              </motion.p>
+                <form onSubmit={handleCreateOrg} className="space-y-4">
+                  <p className="text-xs text-muted-foreground">
+                    Une organisation regroupe votre équipe et vos projets.
+                    Vous en serez l&apos;administrateur.
+                  </p>
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                      Nom de l&apos;organisation
+                    </label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={orgName}
+                        onChange={(e) => {
+                          setOrgName(e.target.value);
+                          setOrgSlug(generateSlug(e.target.value));
+                        }}
+                        placeholder="Mon Agence"
+                        className="input-clean w-full pl-10"
+                        required
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                      Slug (URL)
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        agency.app/
+                      </span>
+                      <input
+                        type="text"
+                        value={orgSlug}
+                        onChange={(e) => setOrgSlug(generateSlug(e.target.value))}
+                        placeholder="mon-agence"
+                        className="input-clean flex-1"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {error && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-xs text-error bg-red-50 px-3 py-2 rounded-lg"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loading || !orgName}
+                    className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {loading ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        Continuer
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </form>
+              </motion.div>
             )}
 
-            <button
-              type="submit"
-              disabled={loading || !orgName}
-              className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  Créer l&apos;organisation
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
+            {/* ─── STEP 2: FIRST PROJECT ─── */}
+            {step === "project" && (
+              <motion.div
+                key="project"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <form onSubmit={handleCreateProject} className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Configurez votre premier projet. Les intégrations sont optionnelles.
+                  </p>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                      Nom du projet *
+                    </label>
+                    <div className="relative">
+                      <FolderKanban className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={projectName}
+                        onChange={(e) => setProjectName(e.target.value)}
+                        placeholder="Refonte site e-commerce"
+                        className="input-clean w-full pl-10"
+                        required
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                      URL du site web
+                    </label>
+                    <div className="relative">
+                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <input
+                        type="url"
+                        value={websiteUrl}
+                        onChange={(e) => setWebsiteUrl(e.target.value)}
+                        placeholder="https://monsite.com"
+                        className="input-clean w-full pl-10"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Git */}
+                  <div className="pt-2 border-t border-border-light">
+                    <p className="text-[11px] font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <GitBranch className="w-3 h-3" /> Git Repository
+                    </p>
+                    <div className="space-y-2">
+                      <select
+                        value={gitProvider}
+                        onChange={(e) => setGitProvider(e.target.value)}
+                        className="input-clean w-full text-sm"
+                      >
+                        <option value="">Aucun</option>
+                        <option value="github">GitHub</option>
+                        <option value="gitlab">GitLab</option>
+                        <option value="bitbucket">Bitbucket</option>
+                      </select>
+                      {gitProvider && (
+                        <input
+                          type="url"
+                          value={gitRepoUrl}
+                          onChange={(e) => setGitRepoUrl(e.target.value)}
+                          placeholder="https://github.com/org/repo"
+                          className="input-clean w-full text-sm"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Jira */}
+                  <div className="pt-2 border-t border-border-light">
+                    <p className="text-[11px] font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <LayoutGrid className="w-3 h-3" /> Jira / Atlassian
+                    </p>
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={jiraBaseUrl}
+                        onChange={(e) => setJiraBaseUrl(e.target.value)}
+                        placeholder="https://monequipe.atlassian.net"
+                        className="input-clean w-full text-sm"
+                      />
+                      {jiraBaseUrl && (
+                        <input
+                          type="text"
+                          value={jiraKey}
+                          onChange={(e) => setJiraKey(e.target.value)}
+                          placeholder="Clé du projet (ex: PROJ)"
+                          className="input-clean w-full text-sm"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* URLs */}
+                  <div className="pt-2 border-t border-border-light">
+                    <p className="text-[11px] font-semibold text-muted-foreground mb-2">
+                      URLs Front / Back office
+                    </p>
+                    <div className="space-y-2">
+                      <input
+                        type="url"
+                        value={frontOfficeUrl}
+                        onChange={(e) => setFrontOfficeUrl(e.target.value)}
+                        placeholder="URL front office (prod)"
+                        className="input-clean w-full text-sm"
+                      />
+                      <input
+                        type="url"
+                        value={backOfficeUrl}
+                        onChange={(e) => setBackOfficeUrl(e.target.value)}
+                        placeholder="URL back office (admin)"
+                        className="input-clean w-full text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {error && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-xs text-error bg-red-50 px-3 py-2 rounded-lg"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loading || !projectName}
+                    className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {loading ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        Lancer le projet
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </form>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </motion.div>
     </div>

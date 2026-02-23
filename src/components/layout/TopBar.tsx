@@ -1,8 +1,11 @@
 "use client";
 
 import { useStore } from "@/store/useStore";
+import { useAuth } from "@/hooks/useAuth";
+import { useOrganization } from "@/hooks/useOrganization";
+import { useProjects } from "@/hooks/useProjects";
+import { useEffect, useState, useRef } from "react";
 import {
-  Globe,
   GitBranch,
   LayoutGrid,
   Zap,
@@ -11,8 +14,15 @@ import {
   Hammer,
   Grid3X3,
   Rocket,
+  Settings,
+  LogOut,
+  FolderKanban,
+  Plus,
+  Check,
+  Building2,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 import type { AppPhase } from "@/types";
 
 export function TopBar() {
@@ -23,6 +33,38 @@ export function TopBar() {
   const setAppPhase = useStore((s) => s.setAppPhase);
   const stories = useStore((s) => s.stories);
   const saveCurrentStory = useStore((s) => s.saveCurrentStory);
+  const currentProjectId = useStore((s) => s.currentProjectId);
+  const setCurrentProjectId = useStore((s) => s.setCurrentProjectId);
+
+  const { user, signOut } = useAuth();
+  const { currentOrg } = useOrganization();
+  const { projects, currentProject, setCurrentProject } = useProjects(currentOrg?.id ?? null);
+
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const projectDropdownRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Sync project from DB to store
+  useEffect(() => {
+    if (currentProject && currentProject.id !== currentProjectId) {
+      setCurrentProjectId(currentProject.id);
+    }
+  }, [currentProject, currentProjectId, setCurrentProjectId]);
+
+  // Close dropdowns on click outside
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (projectDropdownRef.current && !projectDropdownRef.current.contains(e.target as Node)) {
+        setShowProjectDropdown(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const phases: { key: AppPhase; label: string; icon: typeof Hammer; num: string }[] = [
     { key: "build", label: "Build", icon: Hammer, num: "01" },
@@ -33,14 +75,12 @@ export function TopBar() {
   const currentPhaseIndex = phases.findIndex((p) => p.key === appPhase);
 
   const handlePhaseChange = (phase: AppPhase) => {
-    // Save current story when leaving build
     if (appPhase === "build" && phase !== "build") {
       saveCurrentStory();
     }
     setAppPhase(phase);
   };
 
-  // Sub-phases for Build
   const buildSubPhases = [
     { key: "discovery", label: "Discovery" },
     { key: "specification", label: "Specification" },
@@ -51,26 +91,88 @@ export function TopBar() {
     (p) => p.key === context.phase
   );
 
+  const displayProjectName = currentProject?.name || project?.name || "Aucun projet";
+
   return (
     <div className="h-14 flex items-center px-4 border-b border-border-light bg-white/80 backdrop-blur-sm">
-      {/* Logo & Project */}
+      {/* Logo & Org & Project Switcher */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <div className="w-7 h-7 bg-foreground rounded-lg flex items-center justify-center">
             <Zap className="w-4 h-4 text-white" />
           </div>
           <span className="font-semibold text-sm tracking-tight">Agen.cy</span>
-        </div>
-        {project && (
+        </Link>
+
+        {currentOrg && (
           <>
             <div className="w-px h-5 bg-border" />
-            <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <Globe className="w-3.5 h-3.5" />
-              {project.name}
-              <ChevronDown className="w-3 h-3" />
-            </button>
+            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <Building2 className="w-3 h-3" />
+              {currentOrg.name}
+            </span>
           </>
         )}
+
+        <div className="w-px h-5 bg-border" />
+        <div className="relative" ref={projectDropdownRef}>
+          <button
+            onClick={() => setShowProjectDropdown(!showProjectDropdown)}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-lg hover:bg-muted"
+          >
+            <FolderKanban className="w-3.5 h-3.5" />
+            <span className="max-w-[140px] truncate">{displayProjectName}</span>
+            <ChevronDown className={`w-3 h-3 transition-transform ${showProjectDropdown ? "rotate-180" : ""}`} />
+          </button>
+
+          <AnimatePresence>
+            {showProjectDropdown && (
+              <motion.div
+                initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                transition={{ duration: 0.12 }}
+                className="absolute top-full left-0 mt-1 w-64 bg-white rounded-xl border border-border shadow-lg z-50 py-1 overflow-hidden"
+              >
+                <div className="px-3 py-2 border-b border-border-light">
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                    Projets
+                  </p>
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  {projects.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setCurrentProject(p);
+                        setShowProjectDropdown(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-muted transition-colors ${
+                        currentProject?.id === p.id ? "bg-muted" : ""
+                      }`}
+                    >
+                      <FolderKanban className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="truncate flex-1">{p.name}</span>
+                      {currentProject?.id === p.id && (
+                        <Check className="w-3 h-3 text-foreground flex-shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+                <div className="border-t border-border-light">
+                  <Link
+                    href="/dashboard"
+                    onClick={() => setShowProjectDropdown(false)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Gérer les projets
+                  </Link>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* Main Phase Navigation */}
@@ -121,7 +223,6 @@ export function TopBar() {
           })}
         </div>
 
-        {/* Build sub-phases — only visible in Build */}
         {appPhase === "build" && (
           <div className="flex items-center ml-4 gap-0.5">
             {buildSubPhases.map((phase, i) => (
@@ -154,18 +255,31 @@ export function TopBar() {
 
       {/* Right Actions */}
       <div className="flex items-center gap-2">
-        {project?.integrations.git?.connected && (
+        {currentProject?.git_provider && (
+          <div className="tag">
+            <GitBranch className="w-3 h-3" />
+            {currentProject.git_provider}
+          </div>
+        )}
+        {currentProject?.atlassian_project_key && (
+          <div className="tag">
+            <LayoutGrid className="w-3 h-3" />
+            {currentProject.atlassian_project_key}
+          </div>
+        )}
+        {!currentProject?.git_provider && project?.integrations.git?.connected && (
           <div className="tag">
             <GitBranch className="w-3 h-3" />
             Git
           </div>
         )}
-        {project?.integrations.jira?.connected && (
+        {!currentProject?.atlassian_project_key && project?.integrations.jira?.connected && (
           <div className="tag">
             <LayoutGrid className="w-3 h-3" />
             Jira
           </div>
         )}
+
         {appPhase === "build" && currentStory.title && (
           <div className="tag tag-info">
             {currentStory.status === "draft"
@@ -175,6 +289,7 @@ export function TopBar() {
               : "Ready"}
           </div>
         )}
+
         {appPhase === "build" && (
           <button
             onClick={() => {
@@ -187,6 +302,50 @@ export function TopBar() {
             <ExternalLink className="w-3 h-3" />
           </button>
         )}
+
+        {/* User menu */}
+        <div className="relative" ref={userMenuRef}>
+          <button
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className="w-8 h-8 bg-muted rounded-full flex items-center justify-center text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {user?.email?.charAt(0).toUpperCase() || "?"}
+          </button>
+
+          <AnimatePresence>
+            {showUserMenu && (
+              <motion.div
+                initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                transition={{ duration: 0.12 }}
+                className="absolute top-full right-0 mt-1 w-48 bg-white rounded-xl border border-border shadow-lg z-50 py-1 overflow-hidden"
+              >
+                <div className="px-3 py-2 border-b border-border-light">
+                  <p className="text-xs font-medium truncate">{user?.email}</p>
+                </div>
+                <Link
+                  href="/dashboard"
+                  onClick={() => setShowUserMenu(false)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  Administration
+                </Link>
+                <button
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    signOut();
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Se déconnecter
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );
