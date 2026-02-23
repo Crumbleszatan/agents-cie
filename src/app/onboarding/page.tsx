@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap, Building2, ArrowRight, FolderKanban, Globe, Check,
+  GitBranch, LayoutGrid, Link2, Loader2,
 } from "lucide-react";
 
-type Step = "organization" | "project";
+type Step = "organization" | "project" | "integrations";
 
 export default function OnboardingPage() {
   const [step, setStep] = useState<Step>("organization");
@@ -19,6 +20,10 @@ export default function OnboardingPage() {
   // Project
   const [projectName, setProjectName] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [projectId, setProjectId] = useState<string | null>(null);
+  // Integrations
+  const [integrations, setIntegrations] = useState<Record<string, { connected: boolean; account_name: string }>>({});
+  const [integrationsLoading, setIntegrationsLoading] = useState(false);
   // UI
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,17 +112,45 @@ export default function OnboardingPage() {
         return;
       }
 
-      router.push("/");
-      router.refresh();
+      setProjectId(data.project.id);
+      setStep("integrations");
+      loadIntegrations();
+      setLoading(false);
     } catch (err: any) {
       setError(err.message || "Erreur réseau");
       setLoading(false);
     }
   };
 
+  const loadIntegrations = async () => {
+    if (!orgId) return;
+    setIntegrationsLoading(true);
+    try {
+      const res = await fetch(`/api/integrations/status?org_id=${orgId}`);
+      const data = await res.json();
+      if (data.integrations) {
+        setIntegrations(data.integrations);
+      }
+    } catch {}
+    setIntegrationsLoading(false);
+  };
+
+  const handleConnect = (provider: string) => {
+    if (!orgId || !projectId) return;
+    window.location.href = `/api/integrations/${provider}?org_id=${orgId}&project_id=${projectId}`;
+  };
+
+  const providers = [
+    { key: "github", label: "GitHub", icon: GitBranch, color: "bg-gray-900 text-white" },
+    { key: "gitlab", label: "GitLab", icon: GitBranch, color: "bg-orange-500 text-white" },
+    { key: "bitbucket", label: "Bitbucket", icon: GitBranch, color: "bg-blue-600 text-white" },
+    { key: "jira", label: "Jira", icon: LayoutGrid, color: "bg-blue-500 text-white" },
+  ];
+
   const stepsConfig = [
     { key: "organization" as const, label: "Organisation", icon: Building2 },
     { key: "project" as const, label: "Projet", icon: FolderKanban },
+    { key: "integrations" as const, label: "Intégrations", icon: Link2 },
   ];
   const currentStepIndex = stepsConfig.findIndex((s) => s.key === step);
 
@@ -134,14 +167,14 @@ export default function OnboardingPage() {
           </div>
           <h1 className="text-xl font-bold tracking-tight">Bienvenue sur Agen.cy</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {step === "organization"
-              ? "Créez votre organisation pour commencer"
-              : "Configurez votre premier projet"}
+            {step === "organization" && "Créez votre organisation pour commencer"}
+            {step === "project" && "Créez votre premier projet"}
+            {step === "integrations" && "Connectez vos outils"}
           </p>
         </div>
 
         {/* Steps indicator */}
-        <div className="flex items-center justify-center gap-2 mb-6">
+        <div className="flex items-center justify-center gap-1.5 mb-6">
           {stepsConfig.map((s, i) => {
             const Icon = s.icon;
             const isActive = i === currentStepIndex;
@@ -149,7 +182,7 @@ export default function OnboardingPage() {
             return (
               <div key={s.key} className="flex items-center">
                 <div
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
                     isActive
                       ? "bg-foreground text-white"
                       : isDone
@@ -161,7 +194,7 @@ export default function OnboardingPage() {
                   {s.label}
                 </div>
                 {i < stepsConfig.length - 1 && (
-                  <div className={`w-4 h-px mx-1 ${isDone ? "bg-foreground" : "bg-border"}`} />
+                  <div className={`w-3 h-px mx-0.5 ${isDone ? "bg-foreground" : "bg-border"}`} />
                 )}
               </div>
             );
@@ -262,7 +295,7 @@ export default function OnboardingPage() {
               >
                 <form onSubmit={handleCreateProject} className="space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    Créez votre premier projet. Vous pourrez configurer Git et Jira ensuite depuis les paramètres.
+                    Créez votre premier projet.
                   </p>
 
                   <div>
@@ -318,12 +351,89 @@ export default function OnboardingPage() {
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
                       <>
-                        Lancer le projet
+                        Continuer
                         <ArrowRight className="w-4 h-4" />
                       </>
                     )}
                   </button>
                 </form>
+              </motion.div>
+            )}
+
+            {/* ─── STEP 3: INTEGRATIONS ─── */}
+            {step === "integrations" && (
+              <motion.div
+                key="integrations"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-4"
+              >
+                <p className="text-xs text-muted-foreground">
+                  Connectez vos outils pour synchroniser vos repos et projets Jira.
+                  Vous pouvez aussi le faire plus tard depuis les paramètres.
+                </p>
+
+                {integrationsLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {providers.map((provider) => {
+                      const Icon = provider.icon;
+                      const status = integrations[provider.key];
+                      const isConnected = status?.connected;
+
+                      return (
+                        <div key={provider.key} className="flex items-center justify-between p-3 rounded-xl border border-border-light hover:border-border transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${provider.color}`}>
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">{provider.label}</p>
+                              {isConnected && status.account_name && (
+                                <p className="text-[10px] text-green-600">{status.account_name}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {isConnected ? (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 text-xs font-medium">
+                              <Check className="w-3 h-3" />
+                              Connecté
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleConnect(provider.key)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-foreground text-white hover:opacity-90 transition-opacity"
+                            >
+                              <Link2 className="w-3 h-3" />
+                              Connecter
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    router.push("/");
+                    router.refresh();
+                  }}
+                  className="btn-primary w-full flex items-center justify-center gap-2"
+                >
+                  {Object.values(integrations).some((i) => i.connected)
+                    ? "Continuer"
+                    : "Passer et continuer"}
+                  <ArrowRight className="w-4 h-4" />
+                </button>
               </motion.div>
             )}
           </AnimatePresence>

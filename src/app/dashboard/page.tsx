@@ -7,8 +7,8 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap, Building2, FolderKanban, Users, Settings, Plus,
-  ArrowLeft, Globe, GitBranch, LayoutGrid, ExternalLink,
-  Trash2, Pencil, X, Check, ChevronRight, LogOut, ArrowRight,
+  ArrowLeft, Globe, GitBranch, LayoutGrid,
+  Trash2, X, ChevronRight, LogOut,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -378,14 +378,9 @@ function NewProjectForm({
 }) {
   const [name, setName] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
-  const [gitProvider, setGitProvider] = useState("");
-  const [gitRepoUrl, setGitRepoUrl] = useState("");
-  const [jiraKey, setJiraKey] = useState("");
-  const [jiraBaseUrl, setJiraBaseUrl] = useState("");
-  const [frontOfficeUrl, setFrontOfficeUrl] = useState("");
-  const [backOfficeUrl, setBackOfficeUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -400,12 +395,6 @@ function NewProjectForm({
           organization_id: orgId,
           name,
           website_url: websiteUrl || null,
-          git_provider: gitProvider || null,
-          git_repo_url: gitRepoUrl || null,
-          atlassian_project_key: jiraKey || null,
-          atlassian_base_url: jiraBaseUrl || null,
-          front_office_url: frontOfficeUrl || null,
-          back_office_url: backOfficeUrl || null,
         }),
       });
 
@@ -416,7 +405,8 @@ function NewProjectForm({
         return;
       }
 
-      onCreated();
+      // Redirect to project settings to connect integrations (OAuth)
+      router.push(`/dashboard/project/${data.project.id}`);
     } catch (err: any) {
       setError(err.message);
       setLoading(false);
@@ -433,111 +423,42 @@ function NewProjectForm({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-              Nom du projet *
-            </label>
+        <div>
+          <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+            Nom du projet *
+          </label>
+          <div className="relative">
+            <FolderKanban className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Refonte site e-commerce"
-              className="input-clean w-full"
+              className="input-clean w-full pl-10"
               required
               autoFocus
             />
           </div>
-          <div>
-            <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-              URL du site
-            </label>
+        </div>
+        <div>
+          <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+            URL du site web
+          </label>
+          <div className="relative">
+            <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="url"
               value={websiteUrl}
               onChange={(e) => setWebsiteUrl(e.target.value)}
               placeholder="https://monsite.com"
-              className="input-clean w-full"
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-              Git provider
-            </label>
-            <select
-              value={gitProvider}
-              onChange={(e) => setGitProvider(e.target.value)}
-              className="input-clean w-full"
-            >
-              <option value="">Aucun</option>
-              <option value="github">GitHub</option>
-              <option value="gitlab">GitLab</option>
-              <option value="bitbucket">Bitbucket</option>
-            </select>
-          </div>
-          {gitProvider && (
-            <div className="col-span-2">
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                URL du repository
-              </label>
-              <input
-                type="url"
-                value={gitRepoUrl}
-                onChange={(e) => setGitRepoUrl(e.target.value)}
-                placeholder="https://github.com/org/repo"
-                className="input-clean w-full"
-              />
-            </div>
-          )}
-          <div>
-            <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-              Jira base URL
-            </label>
-            <input
-              type="text"
-              value={jiraBaseUrl}
-              onChange={(e) => setJiraBaseUrl(e.target.value)}
-              placeholder="https://team.atlassian.net"
-              className="input-clean w-full"
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-              Jira project key
-            </label>
-            <input
-              type="text"
-              value={jiraKey}
-              onChange={(e) => setJiraKey(e.target.value)}
-              placeholder="PROJ"
-              className="input-clean w-full"
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-              URL front office
-            </label>
-            <input
-              type="url"
-              value={frontOfficeUrl}
-              onChange={(e) => setFrontOfficeUrl(e.target.value)}
-              placeholder="https://..."
-              className="input-clean w-full"
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-              URL back office
-            </label>
-            <input
-              type="url"
-              value={backOfficeUrl}
-              onChange={(e) => setBackOfficeUrl(e.target.value)}
-              placeholder="https://..."
-              className="input-clean w-full"
+              className="input-clean w-full pl-10"
             />
           </div>
         </div>
+
+        <p className="text-[10px] text-muted-foreground">
+          Vous pourrez connecter GitHub, GitLab, Bitbucket et Jira dans les paramètres du projet.
+        </p>
 
         {error && (
           <p className="text-xs text-error bg-red-50 px-3 py-2 rounded-lg">{error}</p>
@@ -557,7 +478,7 @@ function NewProjectForm({
             ) : (
               <>
                 <Plus className="w-3.5 h-3.5" />
-                Créer
+                Créer et configurer
               </>
             )}
           </button>
