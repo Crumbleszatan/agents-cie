@@ -55,6 +55,7 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const orgId = searchParams.get("org_id");
   const projectId = searchParams.get("project_id");
+  const returnUrl = searchParams.get("return_url");
 
   if (!orgId) {
     return NextResponse.json({ error: "org_id requis" }, { status: 400 });
@@ -62,7 +63,7 @@ export async function GET(
 
   const origin = new URL(request.url).origin;
   const callbackUrl = `${origin}/api/integrations/${provider}/callback`;
-  const state = Buffer.from(JSON.stringify({ orgId, projectId })).toString("base64url");
+  const state = Buffer.from(JSON.stringify({ orgId, projectId, returnUrl })).toString("base64url");
 
   const authParams = new URLSearchParams({
     client_id: clientId,

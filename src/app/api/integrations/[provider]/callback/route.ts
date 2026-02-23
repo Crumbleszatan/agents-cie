@@ -35,7 +35,7 @@ export async function GET(
   }
 
   // Decode state
-  let stateData: { orgId: string; projectId?: string };
+  let stateData: { orgId: string; projectId?: string; returnUrl?: string };
   try {
     stateData = JSON.parse(Buffer.from(state, "base64url").toString());
   } catch {
@@ -169,10 +169,16 @@ export async function GET(
     { onConflict: "organization_id,provider" }
   );
 
-  // Redirect back to project settings
-  const redirectPath = stateData.projectId
-    ? `/dashboard/project/${stateData.projectId}?connected=${provider}`
-    : `/dashboard?connected=${provider}`;
+  // Redirect back — use returnUrl if provided (signup/onboarding flows), else project settings
+  let redirectPath: string;
+  if (stateData.returnUrl) {
+    const separator = stateData.returnUrl.includes("?") ? "&" : "?";
+    redirectPath = `${stateData.returnUrl}${separator}connected=${provider}`;
+  } else if (stateData.projectId) {
+    redirectPath = `/dashboard/project/${stateData.projectId}?connected=${provider}`;
+  } else {
+    redirectPath = `/dashboard?connected=${provider}`;
+  }
 
   return NextResponse.redirect(`${origin}${redirectPath}`);
 }

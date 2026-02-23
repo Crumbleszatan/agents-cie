@@ -35,6 +35,10 @@ export function TopBar() {
   const saveCurrentStory = useStore((s) => s.saveCurrentStory);
   const currentProjectId = useStore((s) => s.currentProjectId);
   const setCurrentProjectId = useStore((s) => s.setCurrentProjectId);
+  const setCurrentOrgId = useStore((s) => s.setCurrentOrgId);
+  const setSelectedPageUrl = useStore((s) => s.setSelectedPageUrl);
+  const setProject = useStore((s) => s.setProject);
+  const resetForProjectSwitch = useStore((s) => s.resetForProjectSwitch);
 
   const { user, signOut } = useAuth();
   const { currentOrg } = useOrganization();
@@ -45,12 +49,56 @@ export function TopBar() {
   const projectDropdownRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Sync project from DB to store
+  // Sync org ID to store
   useEffect(() => {
-    if (currentProject && currentProject.id !== currentProjectId) {
-      setCurrentProjectId(currentProject.id);
+    if (currentOrg) {
+      setCurrentOrgId(currentOrg.id);
     }
-  }, [currentProject, currentProjectId, setCurrentProjectId]);
+  }, [currentOrg, setCurrentOrgId]);
+
+  // Sync project from DB to store — update website URL + project info
+  useEffect(() => {
+    if (currentProject) {
+      setCurrentProjectId(currentProject.id);
+      // Sync website URL for the preview iframe
+      if (currentProject.website_url) {
+        setSelectedPageUrl(currentProject.website_url);
+      }
+      // Sync Project object for chat context
+      setProject({
+        id: currentProject.id,
+        name: currentProject.name,
+        websiteUrl: currentProject.website_url || "",
+        brandContext: {
+          name: currentProject.name,
+          industry: "",
+          tone: "professional",
+          colors: [],
+          description: currentProject.description || "",
+        },
+        integrations: {
+          jira: {
+            connected: !!currentProject.atlassian_project_key,
+            projectKey: currentProject.atlassian_project_key || "",
+            baseUrl: currentProject.atlassian_base_url || "",
+            backlogItems: [],
+          },
+          git: {
+            connected: !!currentProject.git_provider,
+            provider: (currentProject.git_provider as "github" | "gitlab" | "bitbucket") || "github",
+            repoUrl: currentProject.git_repo_url || "",
+            defaultBranch: currentProject.git_default_branch || "main",
+          },
+          website: {
+            connected: !!currentProject.website_url,
+            url: currentProject.website_url || "",
+            sitemapPages: [],
+          },
+        },
+        architecture: { nodes: [], edges: [] },
+      });
+    }
+  }, [currentProject, setCurrentProjectId, setSelectedPageUrl, setProject]);
 
   // Close dropdowns on click outside
   useEffect(() => {
@@ -144,7 +192,10 @@ export function TopBar() {
                     <button
                       key={p.id}
                       onClick={() => {
-                        setCurrentProject(p);
+                        if (currentProject?.id !== p.id) {
+                          resetForProjectSwitch();
+                          setCurrentProject(p);
+                        }
                         setShowProjectDropdown(false);
                       }}
                       className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-muted transition-colors ${
@@ -267,19 +318,6 @@ export function TopBar() {
             {currentProject.atlassian_project_key}
           </div>
         )}
-        {!currentProject?.git_provider && project?.integrations.git?.connected && (
-          <div className="tag">
-            <GitBranch className="w-3 h-3" />
-            Git
-          </div>
-        )}
-        {!currentProject?.atlassian_project_key && project?.integrations.jira?.connected && (
-          <div className="tag">
-            <LayoutGrid className="w-3 h-3" />
-            Jira
-          </div>
-        )}
-
         {appPhase === "build" && currentStory.title && (
           <div className="tag tag-info">
             {currentStory.status === "draft"

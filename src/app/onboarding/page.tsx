@@ -1,8 +1,8 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap, Building2, ArrowRight, FolderKanban, Globe, Check,
@@ -12,6 +12,18 @@ import {
 type Step = "organization" | "project" | "integrations";
 
 export default function OnboardingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
+        <div className="w-5 h-5 border-2 border-foreground/20 border-t-foreground rounded-full animate-spin" />
+      </div>
+    }>
+      <OnboardingContent />
+    </Suspense>
+  );
+}
+
+function OnboardingContent() {
   const [step, setStep] = useState<Step>("organization");
   // Organization
   const [orgName, setOrgName] = useState("");
@@ -28,10 +40,38 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
-  // Check if user already has an org
+  // Restore state when returning from OAuth callback
   useEffect(() => {
+    const stepParam = searchParams.get("step");
+    const orgIdParam = searchParams.get("org_id");
+    const projectIdParam = searchParams.get("project_id");
+
+    if (stepParam === "integrations" && orgIdParam && projectIdParam) {
+      setStep("integrations");
+      setOrgId(orgIdParam);
+      setProjectId(projectIdParam);
+      const loadStatus = async () => {
+        setIntegrationsLoading(true);
+        try {
+          const res = await fetch(`/api/integrations/status?org_id=${orgIdParam}`);
+          const data = await res.json();
+          if (data.integrations) {
+            setIntegrations(data.integrations);
+          }
+        } catch {}
+        setIntegrationsLoading(false);
+      };
+      loadStatus();
+    }
+  }, [searchParams]);
+
+  // Check if user already has an org (only if not returning from OAuth)
+  useEffect(() => {
+    if (searchParams.get("step")) return; // Skip check if returning from OAuth
+
     const check = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -137,7 +177,8 @@ export default function OnboardingPage() {
 
   const handleConnect = (provider: string) => {
     if (!orgId || !projectId) return;
-    window.location.href = `/api/integrations/${provider}?org_id=${orgId}&project_id=${projectId}`;
+    const returnUrl = `/onboarding?step=integrations&org_id=${orgId}&project_id=${projectId}`;
+    window.location.href = `/api/integrations/${provider}?org_id=${orgId}&project_id=${projectId}&return_url=${encodeURIComponent(returnUrl)}`;
   };
 
   const providers = [

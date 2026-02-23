@@ -1,19 +1,31 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap, Mail, Lock, User, ArrowRight, Chrome,
   Building2, FolderKanban, Globe, Check, GitBranch,
-  LayoutGrid, Link2, ArrowLeft, Loader2,
+  LayoutGrid, Link2, Loader2,
 } from "lucide-react";
 import Link from "next/link";
 
 type Step = "account" | "organization" | "project" | "integrations";
 
 export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
+        <div className="w-5 h-5 border-2 border-foreground/20 border-t-foreground rounded-full animate-spin" />
+      </div>
+    }>
+      <SignupContent />
+    </Suspense>
+  );
+}
+
+function SignupContent() {
   const [step, setStep] = useState<Step>("account");
   // Account
   const [fullName, setFullName] = useState("");
@@ -34,16 +46,43 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
-  const steps: { key: Step; label: string; icon: typeof User }[] = [
+  // Restore state when returning from OAuth callback
+  useEffect(() => {
+    const stepParam = searchParams.get("step");
+    const orgIdParam = searchParams.get("org_id");
+    const projectIdParam = searchParams.get("project_id");
+
+    if (stepParam === "integrations" && orgIdParam && projectIdParam) {
+      setStep("integrations");
+      setOrgId(orgIdParam);
+      setProjectId(projectIdParam);
+      // Load integration statuses
+      const loadStatus = async () => {
+        setIntegrationsLoading(true);
+        try {
+          const res = await fetch(`/api/integrations/status?org_id=${orgIdParam}`);
+          const data = await res.json();
+          if (data.integrations) {
+            setIntegrations(data.integrations);
+          }
+        } catch {}
+        setIntegrationsLoading(false);
+      };
+      loadStatus();
+    }
+  }, [searchParams]);
+
+  const stepsConfig: { key: Step; label: string; icon: typeof User }[] = [
     { key: "account", label: "Compte", icon: User },
     { key: "organization", label: "Organisation", icon: Building2 },
     { key: "project", label: "Projet", icon: FolderKanban },
     { key: "integrations", label: "Intégrations", icon: Link2 },
   ];
 
-  const currentStepIndex = steps.findIndex((s) => s.key === step);
+  const currentStepIndex = stepsConfig.findIndex((s) => s.key === step);
 
   // ─── Step 1: Create Account ───
   const handleSignup = async (e: React.FormEvent) => {
@@ -161,10 +200,8 @@ export default function SignupPage() {
 
   const handleConnect = (provider: string) => {
     if (!orgId || !projectId) return;
-    // Save return URL so we come back to signup integrations step
     const returnUrl = `/signup?step=integrations&org_id=${orgId}&project_id=${projectId}`;
-    sessionStorage.setItem("oauth_return", returnUrl);
-    window.location.href = `/api/integrations/${provider}?org_id=${orgId}&project_id=${projectId}`;
+    window.location.href = `/api/integrations/${provider}?org_id=${orgId}&project_id=${projectId}&return_url=${encodeURIComponent(returnUrl)}`;
   };
 
   const handleGoogleSignup = async () => {
@@ -219,7 +256,7 @@ export default function SignupPage() {
 
         {/* Steps indicator */}
         <div className="flex items-center justify-center gap-1.5 mb-6">
-          {steps.map((s, i) => {
+          {stepsConfig.map((s, i) => {
             const Icon = s.icon;
             const isActive = i === currentStepIndex;
             const isDone = i < currentStepIndex;
@@ -241,7 +278,7 @@ export default function SignupPage() {
                   )}
                   {s.label}
                 </div>
-                {i < steps.length - 1 && (
+                {i < stepsConfig.length - 1 && (
                   <div
                     className={`w-3 h-px mx-0.5 ${
                       isDone ? "bg-foreground" : "bg-border"

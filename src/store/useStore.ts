@@ -97,6 +97,9 @@ interface AppState {
   setCurrentOrgId: (id: string | null) => void;
   currentProjectId: string | null;
   setCurrentProjectId: (id: string | null) => void;
+
+  // Reset workspace when switching project
+  resetForProjectSwitch: () => void;
 }
 
 function createDefaultStory(): UserStory {
@@ -373,4 +376,18 @@ export const useStore = create<AppState>((set, get) => ({
   setCurrentOrgId: (id) => set({ currentOrgId: id }),
   currentProjectId: null,
   setCurrentProjectId: (id) => set({ currentProjectId: id }),
+
+  // Reset workspace for project switch — clear chat, stories, current story
+  resetForProjectSwitch: () =>
+    set({
+      messages: [],
+      stories: [],
+      currentStory: createDefaultStory(),
+      context: defaultContext,
+      appPhase: "build",
+      capsule: null,
+      isAiTyping: false,
+      selectedPageUrl: "",
+      highlightSelector: null,
+    }),
 }));
