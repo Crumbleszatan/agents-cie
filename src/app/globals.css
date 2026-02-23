@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Font imports */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --color-background: #ffffff;
+  --color-foreground: #0a0a0a;
+  --color-muted: #f5f5f5;
+  --color-muted-foreground: #737373;
+  --color-border: #e5e5e5;
+  --color-border-light: #f0f0f0;
+  --color-accent: #0a0a0a;
+  --color-accent-light: #f5f5f5;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: var(--color-foreground);
+    color: var(--color-background);
+  }
+}
+
+@layer components {
+  .glass {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .glass-border {
+    border: 1px solid rgba(0, 0, 0, 0.06);
+  }
+
+  .panel {
+    background: var(--color-background);
+    border: 1px solid var(--color-border-light);
+    border-radius: 16px;
+  }
+
+  .panel-inset {
+    background: var(--color-muted);
+    border-radius: 12px;
+  }
+
+  .btn-primary {
+    background: var(--color-foreground);
+    color: var(--color-background);
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+  .btn-primary:hover {
+    opacity: 0.85;
+    transform: translateY(-1px);
+  }
+
+  .btn-secondary {
+    background: var(--color-muted);
+    color: var(--color-foreground);
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+  .btn-secondary:hover {
+    background: var(--color-border);
+  }
+
+  .input-clean {
+    background: var(--color-muted);
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    outline: none;
+  }
+  .input-clean:focus {
+    border-color: var(--color-foreground);
+    background: var(--color-background);
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--color-muted);
+    color: var(--color-muted-foreground);
+  }
+
+  .tag-success {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .tag-warning {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .tag-info {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 2px;
+  }
+}
+
+/* Smooth transitions for panels */
+.panel-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Subtle shadow for elevated elements */
+.shadow-soft {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.shadow-elevated {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.04), 0 10px 24px rgba(0, 0, 0, 0.06);
+}
+
+/* Vertical writing mode for matrix axis labels */
+.writing-vertical {
+  writing-mode: vertical-lr;
+  transform: rotate(180deg);
+}
+
+/* React Flow custom styles */
+.react-flow__node {
+  border-radius: 12px !important;
+  border: 1px solid var(--color-border) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+.react-flow__edge-path {
+  stroke: var(--color-border) !important;
+  stroke-width: 1.5 !important;
+}
+
+.react-flow__handle {
+  width: 8px !important;
+  height: 8px !important;
+  background: var(--color-foreground) !important;
+  border: 2px solid var(--color-background) !important;
+}

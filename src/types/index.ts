@@ -1,0 +1,170 @@
+export interface Project {
+  id: string;
+  name: string;
+  websiteUrl: string;
+  brandContext: BrandContext;
+  integrations: Integrations;
+  architecture: ArchitectureGraph;
+}
+
+export interface BrandContext {
+  name: string;
+  industry: string;
+  tone: string;
+  colors: string[];
+  logoUrl?: string;
+  description: string;
+}
+
+export interface Integrations {
+  jira?: JiraConfig;
+  git?: GitConfig;
+  website?: WebsiteConfig;
+}
+
+export interface JiraConfig {
+  connected: boolean;
+  projectKey: string;
+  baseUrl: string;
+  backlogItems: JiraTicket[];
+}
+
+export interface GitConfig {
+  connected: boolean;
+  provider: "github" | "gitlab" | "bitbucket";
+  repoUrl: string;
+  defaultBranch: string;
+}
+
+export interface WebsiteConfig {
+  connected: boolean;
+  url: string;
+  screenshotUrl?: string;
+  sitemapPages: string[];
+}
+
+export interface JiraTicket {
+  key: string;
+  summary: string;
+  status: string;
+  type: "story" | "bug" | "task" | "epic";
+  priority: string;
+}
+
+export interface UserStory {
+  id: string;
+  title: string;
+  asA: string;
+  iWant: string;
+  soThat: string;
+  acceptanceCriteria: AcceptanceCriterion[];
+  subtasks: Subtask[];
+  storyPoints: number | null;
+  priority: "low" | "medium" | "high" | "critical";
+  labels: string[];
+  affectedPages: string[];
+  affectedServices: string[];
+  definitionOfDone: string[];
+  status: "draft" | "refining" | "ready";
+  // Matrix positioning
+  matrixPosition?: { x: number; y: number }; // x = effort, y = impact (0-100)
+  effort: number;  // 0-100, auto-calculated from story points
+  impact: number;  // 0-100, auto-calculated by AI
+  // Production
+  productionMode: "full-ai" | "engineer-ai"; // auto-determined by AI
+  productionStatus: "backlog" | "planned" | "in-progress" | "review" | "done";
+  release?: string; // release name/version
+  startDate?: string; // ISO date
+  endDate?: string;   // ISO date (deadline)
+  linesOfCode: number;
+  jiraKey?: string;
+  gitBranch?: string;
+  completionPercent: number; // 0-100
+}
+
+export interface AcceptanceCriterion {
+  id: string;
+  given: string;
+  when: string;
+  then: string;
+  completed: boolean;
+}
+
+export interface Subtask {
+  id: string;
+  title: string;
+  type: "frontend" | "backend" | "design" | "qa" | "devops";
+  storyPoints: number | null;
+  description: string;
+  order: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: Date;
+  type: "text" | "question" | "suggestion" | "preview" | "architecture";
+  metadata?: {
+    questionType?: string;
+    options?: string[];
+    selectionMode?: "single" | "multiple";
+    affectedArea?: string;
+  };
+  optionsAnswered?: boolean;
+}
+
+export interface ConversationContext {
+  phase: "discovery" | "specification" | "refinement" | "review";
+  questionsAsked: number;
+  topicsExplored: string[];
+  currentFocus: string;
+}
+
+export interface ArchitectureGraph {
+  nodes: ArchNode[];
+  edges: ArchEdge[];
+}
+
+export interface ArchNode {
+  id: string;
+  type: "service" | "api" | "database" | "frontend" | "external" | "queue";
+  label: string;
+  description: string;
+  position: { x: number; y: number };
+  impacted: boolean;
+}
+
+export interface ArchEdge {
+  id: string;
+  source: string;
+  target: string;
+  label: string;
+  type: "rest" | "graphql" | "grpc" | "event" | "database";
+  impacted: boolean;
+}
+
+// ─── Capsule (a collection of US ready to ship) ───
+export interface Capsule {
+  id: string;
+  name: string;
+  stories: UserStory[];
+  status: "draft" | "prioritizing" | "building" | "shipping" | "done";
+  createdAt: string;
+  deadline?: string;
+  totalEffort: number;
+  totalLinesOfCode: number;
+  completionPercent: number;
+  releases: Release[];
+}
+
+export interface Release {
+  id: string;
+  name: string;
+  storyIds: string[];
+  plannedDate: string;
+  status: "planned" | "in-progress" | "shipped";
+}
+
+export type ViewMode = "website" | "architecture";
+export type AppPhase = "build" | "prioritize" | "ship";

@@ -1,0 +1,580 @@
+"use client";
+
+import { useStore } from "@/store/useStore";
+import { uuid } from "@/lib/utils";
+import { motion, AnimatePresence, Reorder } from "framer-motion";
+import { useState } from "react";
+import {
+  FileText,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  Trash2,
+  GripVertical,
+  Check,
+  AlertCircle,
+  Code,
+  Palette,
+  Server,
+  TestTube,
+  Cloud,
+  Edit3,
+  Copy,
+  ExternalLink,
+  Star,
+} from "lucide-react";
+import type { Subtask, AcceptanceCriterion } from "@/types";
+
+const subtaskTypeConfig = {
+  frontend: { icon: Code, color: "text-blue-600", bg: "bg-blue-50", label: "Front" },
+  backend: { icon: Server, color: "text-green-600", bg: "bg-green-50", label: "Back" },
+  design: { icon: Palette, color: "text-purple-600", bg: "bg-purple-50", label: "Design" },
+  qa: { icon: TestTube, color: "text-orange-600", bg: "bg-orange-50", label: "QA" },
+  devops: { icon: Cloud, color: "text-cyan-600", bg: "bg-cyan-50", label: "DevOps" },
+};
+
+export function USPanel() {
+  const currentStory = useStore((s) => s.currentStory);
+  const updateStory = useStore((s) => s.updateStory);
+  const addSubtask = useStore((s) => s.addSubtask);
+  const updateSubtask = useStore((s) => s.updateSubtask);
+  const removeSubtask = useStore((s) => s.removeSubtask);
+  const reorderSubtasks = useStore((s) => s.reorderSubtasks);
+  const addAcceptanceCriterion = useStore((s) => s.addAcceptanceCriterion);
+  const removeAcceptanceCriterion = useStore((s) => s.removeAcceptanceCriterion);
+  const updateAcceptanceCriterion = useStore((s) => s.updateAcceptanceCriterion);
+  const saveCurrentStory = useStore((s) => s.saveCurrentStory);
+  const startNewStory = useStore((s) => s.startNewStory);
+  const storiesCount = useStore((s) => s.stories.length);
+
+  const [expandedSections, setExpandedSections] = useState({
+    story: true,
+    acceptance: true,
+    subtasks: true,
+    dod: false,
+  });
+
+  const [editingField, setEditingField] = useState<string | null>(null);
+
+  const toggleSection = (key: keyof typeof expandedSections) => {
+    setExpandedSections((s) => ({ ...s, [key]: !s[key] }));
+  };
+
+  const priorityColors = {
+    low: "bg-gray-100 text-gray-600",
+    medium: "bg-blue-50 text-blue-600",
+    high: "bg-orange-50 text-orange-600",
+    critical: "bg-red-50 text-red-600",
+  };
+
+  const handleAddSubtask = () => {
+    addSubtask({
+      id: uuid(),
+      title: "Nouvelle sous-tâche",
+      type: "frontend",
+      storyPoints: null,
+      description: "",
+      order: currentStory.subtasks.length,
+    });
+  };
+
+  const handleAddCriterion = () => {
+    addAcceptanceCriterion({
+      id: uuid(),
+      given: "",
+      when: "",
+      then: "",
+      completed: false,
+    });
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-border-light flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FileText className="w-4 h-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold">User Story</h2>
+          <span
+            className={`tag ${
+              currentStory.status === "draft"
+                ? ""
+                : currentStory.status === "refining"
+                ? "tag-warning"
+                : "tag-success"
+            }`}
+          >
+            {currentStory.status === "draft"
+              ? "Brouillon"
+              : currentStory.status === "refining"
+              ? "En cours"
+              : "Prête"}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
+            <Copy className="w-3.5 h-3.5" />
+          </button>
+          <button className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
+            <ExternalLink className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-3 space-y-3">
+        {/* Title & Priority */}
+        <div>
+          <input
+            value={currentStory.title}
+            onChange={(e) => updateStory({ title: e.target.value })}
+            placeholder="Titre de la User Story"
+            className="w-full text-base font-semibold bg-transparent outline-none placeholder:text-muted-foreground/40"
+          />
+          <div className="flex items-center gap-2 mt-2">
+            <select
+              value={currentStory.priority}
+              onChange={(e) =>
+                updateStory({ priority: e.target.value as Subtask["type"] & string as "low" | "medium" | "high" | "critical" })
+              }
+              className={`text-[11px] font-medium px-2 py-1 rounded-md border-0 outline-none cursor-pointer ${priorityColors[currentStory.priority]}`}
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+            {currentStory.storyPoints !== null && (
+              <div className="flex items-center gap-1 tag">
+                <Star className="w-3 h-3" />
+                <span>{currentStory.storyPoints} pts</span>
+                <span className="text-[9px] text-muted-foreground/60 ml-1">
+                  (à valider par l&apos;équipe)
+                </span>
+              </div>
+            )}
+            {currentStory.labels.map((label) => (
+              <span key={label} className="tag tag-info">
+                {label}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* User Story Format */}
+        <SectionHeader
+          title="Story"
+          expanded={expandedSections.story}
+          onToggle={() => toggleSection("story")}
+        />
+        <AnimatePresence>
+          {expandedSections.story && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="space-y-2 panel-inset p-3">
+                <StoryField
+                  label="En tant que"
+                  value={currentStory.asA}
+                  onChange={(v) => updateStory({ asA: v })}
+                  placeholder="type d'utilisateur..."
+                  editing={editingField === "asA"}
+                  onEdit={() => setEditingField("asA")}
+                  onBlur={() => setEditingField(null)}
+                />
+                <StoryField
+                  label="Je veux"
+                  value={currentStory.iWant}
+                  onChange={(v) => updateStory({ iWant: v })}
+                  placeholder="action ou fonctionnalité..."
+                  editing={editingField === "iWant"}
+                  onEdit={() => setEditingField("iWant")}
+                  onBlur={() => setEditingField(null)}
+                />
+                <StoryField
+                  label="Afin de"
+                  value={currentStory.soThat}
+                  onChange={(v) => updateStory({ soThat: v })}
+                  placeholder="bénéfice attendu..."
+                  editing={editingField === "soThat"}
+                  onEdit={() => setEditingField("soThat")}
+                  onBlur={() => setEditingField(null)}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Acceptance Criteria */}
+        <SectionHeader
+          title="Critères d'acceptance"
+          count={currentStory.acceptanceCriteria.length}
+          expanded={expandedSections.acceptance}
+          onToggle={() => toggleSection("acceptance")}
+          onAdd={handleAddCriterion}
+        />
+        <AnimatePresence>
+          {expandedSections.acceptance && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="space-y-2">
+                {currentStory.acceptanceCriteria.map((criterion, i) => (
+                  <CriterionCard
+                    key={criterion.id}
+                    criterion={criterion}
+                    index={i}
+                    onUpdate={(updates) =>
+                      updateAcceptanceCriterion(criterion.id, updates)
+                    }
+                    onRemove={() => removeAcceptanceCriterion(criterion.id)}
+                  />
+                ))}
+                {currentStory.acceptanceCriteria.length === 0 && (
+                  <p className="text-xs text-muted-foreground/50 text-center py-3">
+                    Les critères seront générés automatiquement
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Subtasks */}
+        <SectionHeader
+          title="Sous-tâches"
+          count={currentStory.subtasks.length}
+          expanded={expandedSections.subtasks}
+          onToggle={() => toggleSection("subtasks")}
+          onAdd={handleAddSubtask}
+        />
+        <AnimatePresence>
+          {expandedSections.subtasks && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              {currentStory.subtasks.length > 0 ? (
+                <Reorder.Group
+                  values={currentStory.subtasks}
+                  onReorder={reorderSubtasks}
+                  className="space-y-1.5"
+                >
+                  {currentStory.subtasks.map((subtask) => (
+                    <SubtaskCard
+                      key={subtask.id}
+                      subtask={subtask}
+                      onUpdate={(updates) =>
+                        updateSubtask(subtask.id, updates)
+                      }
+                      onRemove={() => removeSubtask(subtask.id)}
+                    />
+                  ))}
+                </Reorder.Group>
+              ) : (
+                <p className="text-xs text-muted-foreground/50 text-center py-3">
+                  Les sous-tâches seront générées automatiquement
+                </p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Definition of Done */}
+        <SectionHeader
+          title="Definition of Done"
+          count={currentStory.definitionOfDone.length}
+          expanded={expandedSections.dod}
+          onToggle={() => toggleSection("dod")}
+        />
+        <AnimatePresence>
+          {expandedSections.dod && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="panel-inset p-3 space-y-1.5">
+                {currentStory.definitionOfDone.map((item, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 text-xs text-muted-foreground"
+                  >
+                    <Check className="w-3 h-3 text-success flex-shrink-0" />
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-border-light space-y-2">
+        <button
+          onClick={() => {
+            saveCurrentStory();
+            startNewStory();
+          }}
+          disabled={!currentStory.title}
+          className="btn-secondary w-full flex items-center justify-center gap-2 text-xs disabled:opacity-40"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Sauvegarder &amp; Nouvelle US
+          {storiesCount > 0 && (
+            <span className="tag text-[9px] ml-1">{storiesCount} sauvée{storiesCount > 1 ? "s" : ""}</span>
+          )}
+        </button>
+        <button className="btn-primary w-full flex items-center justify-center gap-2 text-xs">
+          <ExternalLink className="w-3.5 h-3.5" />
+          Exporter vers Jira
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({
+  title,
+  count,
+  expanded,
+  onToggle,
+  onAdd,
+}: {
+  title: string;
+  count?: number;
+  expanded: boolean;
+  onToggle: () => void;
+  onAdd?: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <button
+        onClick={onToggle}
+        className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {expanded ? (
+          <ChevronDown className="w-3 h-3" />
+        ) : (
+          <ChevronRight className="w-3 h-3" />
+        )}
+        {title}
+        {count !== undefined && (
+          <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-md">
+            {count}
+          </span>
+        )}
+      </button>
+      {onAdd && (
+        <button
+          onClick={onAdd}
+          className="p-1 rounded-md hover:bg-muted transition-colors text-muted-foreground"
+        >
+          <Plus className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function StoryField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  editing,
+  onEdit,
+  onBlur,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  editing: boolean;
+  onEdit: () => void;
+  onBlur: () => void;
+}) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider min-w-[70px] pt-1">
+        {label}
+      </span>
+      {editing ? (
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+          placeholder={placeholder}
+          className="flex-1 text-xs bg-white px-2 py-1 rounded-md border border-border outline-none focus:border-foreground"
+          autoFocus
+        />
+      ) : (
+        <button
+          onClick={onEdit}
+          className="flex-1 text-xs text-left py-1 group flex items-center gap-1"
+        >
+          <span className={value ? "text-foreground" : "text-muted-foreground/40"}>
+            {value || placeholder}
+          </span>
+          <Edit3 className="w-2.5 h-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CriterionCard({
+  criterion,
+  index,
+  onUpdate,
+  onRemove,
+}: {
+  criterion: AcceptanceCriterion;
+  index: number;
+  onUpdate: (updates: Partial<AcceptanceCriterion>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <motion.div
+      layout
+      className="panel-inset p-3 space-y-1.5 group"
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-semibold text-muted-foreground">
+          AC-{index + 1}
+        </span>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => onUpdate({ completed: !criterion.completed })}
+            className={`p-1 rounded ${
+              criterion.completed
+                ? "bg-success/10 text-success"
+                : "hover:bg-muted text-muted-foreground"
+            }`}
+          >
+            <Check className="w-3 h-3" />
+          </button>
+          <button
+            onClick={onRemove}
+            className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+      <div className="space-y-1">
+        <CriterionField
+          label="GIVEN"
+          value={criterion.given}
+          onChange={(v) => onUpdate({ given: v })}
+        />
+        <CriterionField
+          label="WHEN"
+          value={criterion.when}
+          onChange={(v) => onUpdate({ when: v })}
+        />
+        <CriterionField
+          label="THEN"
+          value={criterion.then}
+          onChange={(v) => onUpdate({ then: v })}
+        />
+      </div>
+    </motion.div>
+  );
+}
+
+function CriterionField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[9px] font-mono font-bold text-muted-foreground/60 min-w-[40px]">
+        {label}
+      </span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="..."
+        className="flex-1 text-[11px] bg-transparent outline-none placeholder:text-muted-foreground/30"
+      />
+    </div>
+  );
+}
+
+function SubtaskCard({
+  subtask,
+  onUpdate,
+  onRemove,
+}: {
+  subtask: Subtask;
+  onUpdate: (updates: Partial<Subtask>) => void;
+  onRemove: () => void;
+}) {
+  const config = subtaskTypeConfig[subtask.type];
+  const Icon = config.icon;
+
+  return (
+    <Reorder.Item
+      value={subtask}
+      className="flex items-center gap-2 px-2.5 py-2 rounded-xl bg-white border border-border-light group hover:shadow-sm transition-all cursor-grab active:cursor-grabbing"
+    >
+      <GripVertical className="w-3 h-3 text-muted-foreground/30 flex-shrink-0" />
+      <div
+        className={`w-6 h-6 rounded-md ${config.bg} flex items-center justify-center flex-shrink-0`}
+      >
+        <Icon className={`w-3 h-3 ${config.color}`} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <input
+          value={subtask.title}
+          onChange={(e) => onUpdate({ title: e.target.value })}
+          className="w-full text-xs font-medium bg-transparent outline-none"
+        />
+      </div>
+      <select
+        value={subtask.type}
+        onChange={(e) =>
+          onUpdate({ type: e.target.value as Subtask["type"] })
+        }
+        className="text-[10px] bg-transparent outline-none text-muted-foreground cursor-pointer"
+      >
+        <option value="frontend">Front</option>
+        <option value="backend">Back</option>
+        <option value="design">Design</option>
+        <option value="qa">QA</option>
+        <option value="devops">DevOps</option>
+      </select>
+      {subtask.storyPoints !== null && (
+        <span className="text-[10px] text-muted-foreground font-mono">
+          {subtask.storyPoints}p
+        </span>
+      )}
+      <button
+        onClick={onRemove}
+        className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+      >
+        <Trash2 className="w-3 h-3" />
+      </button>
+    </Reorder.Item>
+  );
+}
