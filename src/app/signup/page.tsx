@@ -41,6 +41,20 @@ export default function SignupPage() {
       return;
     }
 
+    // If email confirmation is enabled, signUp returns user but no session.
+    // In that case, auto-sign in to get a session and continue the flow.
+    if (data.user && !data.session) {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) {
+        // If auto sign-in fails (confirmation strictly enforced), still move to org step
+        // The user will be asked to confirm later
+        console.warn("Auto sign-in after signup failed:", signInError.message);
+      }
+    }
+
     // Move to organization step
     if (data.user) {
       setStep("organization");
