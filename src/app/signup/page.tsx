@@ -67,47 +67,27 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
 
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      setError("Session expirée, veuillez vous reconnecter.");
-      setLoading(false);
-      return;
-    }
-
-    // Create organization
-    const { data: org, error: orgError } = await supabase
-      .from("organizations")
-      .insert({
-        name: orgName,
-        slug: orgSlug.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
-      })
-      .select()
-      .single();
-
-    if (orgError) {
-      setError(orgError.message);
-      setLoading(false);
-      return;
-    }
-
-    // Add user as admin
-    const { error: memberError } = await supabase
-      .from("organization_members")
-      .insert({
-        organization_id: org.id,
-        user_id: user.id,
-        role: "admin",
+    try {
+      const res = await fetch("/api/organizations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: orgName, slug: orgSlug }),
       });
 
-    if (memberError) {
-      setError(memberError.message);
-      setLoading(false);
-      return;
-    }
+      const data = await res.json();
 
-    router.push("/");
-    router.refresh();
+      if (!res.ok) {
+        setError(data.error || "Erreur lors de la création de l'organisation");
+        setLoading(false);
+        return;
+      }
+
+      router.push("/");
+      router.refresh();
+    } catch (err: any) {
+      setError(err.message || "Erreur réseau");
+      setLoading(false);
+    }
   };
 
   const handleGoogleSignup = async () => {
