@@ -5,8 +5,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Zap, Building2, ArrowRight, FolderKanban, Globe,
-  GitBranch, LayoutGrid, Check,
+  Zap, Building2, ArrowRight, FolderKanban, Globe, Check,
 } from "lucide-react";
 
 type Step = "organization" | "project";
@@ -20,12 +19,6 @@ export default function OnboardingPage() {
   // Project
   const [projectName, setProjectName] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
-  const [gitProvider, setGitProvider] = useState("");
-  const [gitRepoUrl, setGitRepoUrl] = useState("");
-  const [jiraKey, setJiraKey] = useState("");
-  const [jiraBaseUrl, setJiraBaseUrl] = useState("");
-  const [frontOfficeUrl, setFrontOfficeUrl] = useState("");
-  const [backOfficeUrl, setBackOfficeUrl] = useState("");
   // UI
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,12 +96,6 @@ export default function OnboardingPage() {
           organization_id: orgId,
           name: projectName,
           website_url: websiteUrl || null,
-          git_provider: gitProvider || null,
-          git_repo_url: gitRepoUrl || null,
-          atlassian_project_key: jiraKey || null,
-          atlassian_base_url: jiraBaseUrl || null,
-          front_office_url: frontOfficeUrl || null,
-          back_office_url: backOfficeUrl || null,
         }),
       });
 
@@ -275,7 +262,7 @@ export default function OnboardingPage() {
               >
                 <form onSubmit={handleCreateProject} className="space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    Configurez votre premier projet. Les intégrations sont optionnelles.
+                    Créez votre premier projet. Vous pourrez configurer Git et Jira ensuite depuis les paramètres.
                   </p>
 
                   <div>
@@ -308,82 +295,6 @@ export default function OnboardingPage() {
                         onChange={(e) => setWebsiteUrl(e.target.value)}
                         placeholder="https://monsite.com"
                         className="input-clean w-full pl-10"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Git */}
-                  <div className="pt-2 border-t border-border-light">
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
-                      <GitBranch className="w-3 h-3" /> Git Repository
-                    </p>
-                    <div className="space-y-2">
-                      <select
-                        value={gitProvider}
-                        onChange={(e) => setGitProvider(e.target.value)}
-                        className="input-clean w-full text-sm"
-                      >
-                        <option value="">Aucun</option>
-                        <option value="github">GitHub</option>
-                        <option value="gitlab">GitLab</option>
-                        <option value="bitbucket">Bitbucket</option>
-                      </select>
-                      {gitProvider && (
-                        <input
-                          type="url"
-                          value={gitRepoUrl}
-                          onChange={(e) => setGitRepoUrl(e.target.value)}
-                          placeholder="https://github.com/org/repo"
-                          className="input-clean w-full text-sm"
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Jira */}
-                  <div className="pt-2 border-t border-border-light">
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
-                      <LayoutGrid className="w-3 h-3" /> Jira / Atlassian
-                    </p>
-                    <div className="space-y-2">
-                      <input
-                        type="text"
-                        value={jiraBaseUrl}
-                        onChange={(e) => setJiraBaseUrl(e.target.value)}
-                        placeholder="https://monequipe.atlassian.net"
-                        className="input-clean w-full text-sm"
-                      />
-                      {jiraBaseUrl && (
-                        <input
-                          type="text"
-                          value={jiraKey}
-                          onChange={(e) => setJiraKey(e.target.value)}
-                          placeholder="Clé du projet (ex: PROJ)"
-                          className="input-clean w-full text-sm"
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* URLs */}
-                  <div className="pt-2 border-t border-border-light">
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-2">
-                      URLs Front / Back office
-                    </p>
-                    <div className="space-y-2">
-                      <input
-                        type="url"
-                        value={frontOfficeUrl}
-                        onChange={(e) => setFrontOfficeUrl(e.target.value)}
-                        placeholder="URL front office (prod)"
-                        className="input-clean w-full text-sm"
-                      />
-                      <input
-                        type="url"
-                        value={backOfficeUrl}
-                        onChange={(e) => setBackOfficeUrl(e.target.value)}
-                        placeholder="URL back office (admin)"
-                        className="input-clean w-full text-sm"
                       />
                     </div>
                   </div>

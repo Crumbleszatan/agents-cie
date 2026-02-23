@@ -1,12 +1,13 @@
 "use client";
 
 import { useAuth } from "@/hooks/useAuth";
-import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { useEffect, useState, useCallback } from "react";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap, ArrowLeft, Save, Globe, GitBranch, LayoutGrid,
-  FolderKanban, ExternalLink, Trash2,
+  FolderKanban, ExternalLink, Trash2, Check, X, Loader2,
+  Link2, Unplug, ChevronDown, Search,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -28,9 +29,41 @@ interface ProjectData {
   updated_at: string;
 }
 
+interface IntegrationStatus {
+  connected: boolean;
+  account_name: string;
+  account_url: string;
+  connected_at: string;
+}
+
+interface RepoItem {
+  id: string;
+  name: string;
+  full_name: string;
+  url: string;
+  default_branch: string;
+  private: boolean;
+}
+
+interface JiraProject {
+  id: string;
+  key: string;
+  name: string;
+  url: string;
+  avatar: string | null;
+  projectType: string;
+}
+
+const GIT_PROVIDERS = [
+  { key: "github", label: "GitHub", color: "bg-gray-900", textColor: "text-white" },
+  { key: "gitlab", label: "GitLab", color: "bg-orange-500", textColor: "text-white" },
+  { key: "bitbucket", label: "Bitbucket", color: "bg-blue-600", textColor: "text-white" },
+];
+
 export default function ProjectSettingsPage() {
   const { user, loading: authLoading } = useAuth();
   const params = useParams();
+  const searchParams = useSearchParams();
   const projectId = params.id as string;
   const router = useRouter();
   const supabase = createClient();
@@ -45,13 +78,35 @@ export default function ProjectSettingsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
-  const [gitProvider, setGitProvider] = useState("");
-  const [gitRepoUrl, setGitRepoUrl] = useState("");
-  const [gitDefaultBranch, setGitDefaultBranch] = useState("main");
-  const [jiraKey, setJiraKey] = useState("");
-  const [jiraBaseUrl, setJiraBaseUrl] = useState("");
   const [frontOfficeUrl, setFrontOfficeUrl] = useState("");
   const [backOfficeUrl, setBackOfficeUrl] = useState("");
+
+  // Integration state
+  const [integrations, setIntegrations] = useState<Record<string, IntegrationStatus>>({});
+  const [integrationsLoading, setIntegrationsLoading] = useState(false);
+
+  // Git repos selector
+  const [repos, setRepos] = useState<RepoItem[]>([]);
+  const [reposLoading, setReposLoading] = useState(false);
+  const [showRepoSelector, setShowRepoSelector] = useState(false);
+  const [repoSearch, setRepoSearch] = useState("");
+  const [selectedGitProvider, setSelectedGitProvider] = useState<string | null>(null);
+  const [selectedRepoUrl, setSelectedRepoUrl] = useState("");
+  const [selectedRepoBranch, setSelectedRepoBranch] = useState("main");
+
+  // Jira projects selector
+  const [jiraProjects, setJiraProjects] = useState<JiraProject[]>([]);
+  const [jiraProjectsLoading, setJiraProjectsLoading] = useState(false);
+  const [showJiraSelector, setShowJiraSelector] = useState(false);
+  const [jiraSearch, setJiraSearch] = useState("");
+  const [selectedJiraKey, setSelectedJiraKey] = useState("");
+  const [selectedJiraBaseUrl, setSelectedJiraBaseUrl] = useState("");
+
+  // Disconnecting state
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+
+  // Success notification from OAuth callback
+  const [connectedProvider, setConnectedProvider] = useState<string | null>(null);
 
   // Load project
   useEffect(() => {
@@ -69,13 +124,13 @@ export default function ProjectSettingsPage() {
         setName(data.name);
         setDescription(data.description || "");
         setWebsiteUrl(data.website_url || "");
-        setGitProvider(data.git_provider || "");
-        setGitRepoUrl(data.git_repo_url || "");
-        setGitDefaultBranch(data.git_default_branch || "main");
-        setJiraKey(data.atlassian_project_key || "");
-        setJiraBaseUrl(data.atlassian_base_url || "");
         setFrontOfficeUrl(data.front_office_url || "");
         setBackOfficeUrl(data.back_office_url || "");
+        setSelectedGitProvider(data.git_provider || null);
+        setSelectedRepoUrl(data.git_repo_url || "");
+        setSelectedRepoBranch(data.git_default_branch || "main");
+        setSelectedJiraKey(data.atlassian_project_key || "");
+        setSelectedJiraBaseUrl(data.atlassian_base_url || "");
       }
       setLoading(false);
     };
@@ -83,10 +138,122 @@ export default function ProjectSettingsPage() {
     load();
   }, [projectId, supabase, authLoading]);
 
+  // Load integration status
+  const loadIntegrations = useCallback(async () => {
+    if (!project?.organization_id) return;
+    setIntegrationsLoading(true);
+    try {
+      const res = await fetch(`/api/integrations/status?org_id=${project.organization_id}`);
+      const data = await res.json();
+      if (data.integrations) {
+        setIntegrations(data.integrations);
+      }
+    } catch {}
+    setIntegrationsLoading(false);
+  }, [project?.organization_id]);
+
+  useEffect(() => {
+    if (project?.organization_id) {
+      loadIntegrations();
+    }
+  }, [project?.organization_id, loadIntegrations]);
+
+  // Handle OAuth callback notification
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    if (connected) {
+      setConnectedProvider(connected);
+      loadIntegrations();
+      // Clean URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete("connected");
+      url.searchParams.delete("error");
+      window.history.replaceState({}, "", url.toString());
+      // Auto-dismiss notification
+      setTimeout(() => setConnectedProvider(null), 4000);
+    }
+  }, [searchParams, loadIntegrations]);
+
   // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
   }, [authLoading, user, router]);
+
+  // Load repos for a connected git provider
+  const loadRepos = async (provider: string) => {
+    if (!project?.organization_id) return;
+    setReposLoading(true);
+    setRepos([]);
+    try {
+      const res = await fetch(`/api/integrations/${provider}/repos?org_id=${project.organization_id}`);
+      const data = await res.json();
+      if (data.repos) {
+        setRepos(data.repos);
+      }
+    } catch {}
+    setReposLoading(false);
+  };
+
+  // Load Jira projects
+  const loadJiraProjects = async () => {
+    if (!project?.organization_id) return;
+    setJiraProjectsLoading(true);
+    setJiraProjects([]);
+    try {
+      const res = await fetch(`/api/integrations/jira/projects?org_id=${project.organization_id}`);
+      const data = await res.json();
+      if (data.projects) {
+        setJiraProjects(data.projects);
+      }
+    } catch {}
+    setJiraProjectsLoading(false);
+  };
+
+  // Connect to OAuth provider
+  const handleConnect = (provider: string) => {
+    if (!project?.organization_id) return;
+    const url = `/api/integrations/${provider}?org_id=${project.organization_id}&project_id=${projectId}`;
+    window.location.href = url;
+  };
+
+  // Disconnect provider
+  const handleDisconnect = async (provider: string) => {
+    if (!project?.organization_id) return;
+    setDisconnecting(provider);
+    try {
+      await fetch(`/api/integrations/${provider}?org_id=${project.organization_id}`, {
+        method: "DELETE",
+      });
+      // Clear provider-specific project data
+      if (provider === "jira") {
+        setSelectedJiraKey("");
+        setSelectedJiraBaseUrl("");
+      } else if (["github", "gitlab", "bitbucket"].includes(provider)) {
+        if (selectedGitProvider === provider) {
+          setSelectedGitProvider(null);
+          setSelectedRepoUrl("");
+          setSelectedRepoBranch("main");
+        }
+      }
+      await loadIntegrations();
+    } catch {}
+    setDisconnecting(null);
+  };
+
+  // Select a repo
+  const handleSelectRepo = (repo: RepoItem, provider: string) => {
+    setSelectedGitProvider(provider);
+    setSelectedRepoUrl(repo.url);
+    setSelectedRepoBranch(repo.default_branch);
+    setShowRepoSelector(false);
+  };
+
+  // Select a Jira project
+  const handleSelectJiraProject = (proj: JiraProject) => {
+    setSelectedJiraKey(proj.key);
+    setSelectedJiraBaseUrl(proj.url.split("/browse/")[0] || "");
+    setShowJiraSelector(false);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,11 +270,11 @@ export default function ProjectSettingsPage() {
           name,
           description: description || null,
           website_url: websiteUrl || null,
-          git_provider: gitProvider || null,
-          git_repo_url: gitRepoUrl || null,
-          git_default_branch: gitDefaultBranch || "main",
-          atlassian_project_key: jiraKey || null,
-          atlassian_base_url: jiraBaseUrl || null,
+          git_provider: selectedGitProvider || null,
+          git_repo_url: selectedRepoUrl || null,
+          git_default_branch: selectedRepoBranch || "main",
+          atlassian_project_key: selectedJiraKey || null,
+          atlassian_base_url: selectedJiraBaseUrl || null,
           front_office_url: frontOfficeUrl || null,
           back_office_url: backOfficeUrl || null,
         }),
@@ -134,6 +301,23 @@ export default function ProjectSettingsPage() {
       router.push("/dashboard");
     }
   };
+
+  // Find which git providers are connected
+  const connectedGitProviders = GIT_PROVIDERS.filter(
+    (p) => integrations[p.key]?.connected
+  );
+
+  const filteredRepos = repos.filter(
+    (r) =>
+      r.name.toLowerCase().includes(repoSearch.toLowerCase()) ||
+      r.full_name.toLowerCase().includes(repoSearch.toLowerCase())
+  );
+
+  const filteredJiraProjects = jiraProjects.filter(
+    (p) =>
+      p.name.toLowerCase().includes(jiraSearch.toLowerCase()) ||
+      p.key.toLowerCase().includes(jiraSearch.toLowerCase())
+  );
 
   if (loading || authLoading) {
     return (
@@ -177,6 +361,26 @@ export default function ProjectSettingsPage() {
           {project.name}
         </span>
       </header>
+
+      {/* Success notification */}
+      <AnimatePresence>
+        {connectedProvider && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-4 right-4 z-50 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-xl shadow-lg flex items-center gap-2"
+          >
+            <Check className="w-4 h-4" />
+            <span className="text-sm font-medium">
+              {connectedProvider.charAt(0).toUpperCase() + connectedProvider.slice(1)} connecté avec succès
+            </span>
+            <button onClick={() => setConnectedProvider(null)} className="ml-2 hover:text-green-900">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="max-w-3xl mx-auto px-6 py-8">
         <div className="mb-8">
@@ -236,88 +440,353 @@ export default function ProjectSettingsPage() {
             </div>
           </section>
 
-          {/* Git */}
+          {/* ─── GIT INTEGRATION ─── */}
           <section className="panel shadow-soft p-6 space-y-4">
             <h2 className="text-sm font-semibold flex items-center gap-2">
               <GitBranch className="w-4 h-4" />
               Git Repository
             </h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                  Provider
-                </label>
-                <select
-                  value={gitProvider}
-                  onChange={(e) => setGitProvider(e.target.value)}
-                  className="input-clean w-full"
-                >
-                  <option value="">Aucun</option>
-                  <option value="github">GitHub</option>
-                  <option value="gitlab">GitLab</option>
-                  <option value="bitbucket">Bitbucket</option>
-                </select>
+
+            {/* Connect buttons */}
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Connectez votre compte Git pour sélectionner un repository.
+              </p>
+
+              <div className="flex flex-wrap gap-2">
+                {GIT_PROVIDERS.map((provider) => {
+                  const status = integrations[provider.key];
+                  const isConnected = status?.connected;
+                  const isDisconnecting = disconnecting === provider.key;
+
+                  return (
+                    <div key={provider.key} className="flex items-center gap-1.5">
+                      {isConnected ? (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-800 text-xs font-medium">
+                          <Check className="w-3 h-3" />
+                          {provider.label}
+                          {status.account_name && (
+                            <span className="text-green-600 font-normal">({status.account_name})</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDisconnect(provider.key)}
+                            disabled={isDisconnecting}
+                            className="ml-1 p-0.5 rounded hover:bg-green-100 text-green-600 hover:text-red-500 transition-colors"
+                            title="Déconnecter"
+                          >
+                            {isDisconnecting ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Unplug className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleConnect(provider.key)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${provider.color} ${provider.textColor} hover:opacity-90 transition-opacity`}
+                        >
+                          <Link2 className="w-3 h-3" />
+                          Connecter {provider.label}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-              <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                  Branche par défaut
-                </label>
-                <input
-                  type="text"
-                  value={gitDefaultBranch}
-                  onChange={(e) => setGitDefaultBranch(e.target.value)}
-                  placeholder="main"
-                  className="input-clean w-full"
-                />
-              </div>
-              {gitProvider && (
-                <div className="col-span-2">
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                    URL du repository
-                  </label>
-                  <input
-                    type="url"
-                    value={gitRepoUrl}
-                    onChange={(e) => setGitRepoUrl(e.target.value)}
-                    placeholder="https://github.com/org/repo"
-                    className="input-clean w-full"
-                  />
-                </div>
-              )}
             </div>
+
+            {/* Repo selector - show if any git provider is connected */}
+            {connectedGitProviders.length > 0 && (
+              <div className="space-y-3 pt-3 border-t border-border-light">
+                <label className="text-[11px] font-medium text-muted-foreground block">
+                  Repository sélectionné
+                </label>
+
+                {selectedRepoUrl ? (
+                  <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                    <GitBranch className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{selectedRepoUrl}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Branche: {selectedRepoBranch} · Provider: {selectedGitProvider}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedRepoUrl("");
+                        setSelectedRepoBranch("main");
+                        setSelectedGitProvider(null);
+                      }}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">Aucun repository sélectionné</p>
+                )}
+
+                {/* Repo picker per provider */}
+                {connectedGitProviders.map((provider) => (
+                  <div key={provider.key}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (showRepoSelector && reposLoading) return;
+                        setShowRepoSelector(!showRepoSelector);
+                        setRepoSearch("");
+                        if (!showRepoSelector) {
+                          loadRepos(provider.key);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-foreground font-medium hover:underline"
+                    >
+                      <Search className="w-3 h-3" />
+                      Parcourir les repos {provider.label}
+                      <ChevronDown className={`w-3 h-3 transition-transform ${showRepoSelector ? "rotate-180" : ""}`} />
+                    </button>
+
+                    <AnimatePresence>
+                      {showRepoSelector && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-2 border border-border rounded-xl overflow-hidden bg-white">
+                            {/* Search */}
+                            <div className="p-2 border-b border-border-light">
+                              <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                <input
+                                  type="text"
+                                  value={repoSearch}
+                                  onChange={(e) => setRepoSearch(e.target.value)}
+                                  placeholder="Rechercher un repository..."
+                                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted rounded-lg outline-none focus:ring-1 focus:ring-foreground/20"
+                                  autoFocus
+                                />
+                              </div>
+                            </div>
+
+                            {/* List */}
+                            <div className="max-h-60 overflow-y-auto">
+                              {reposLoading ? (
+                                <div className="flex items-center justify-center py-6">
+                                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                                  <span className="ml-2 text-xs text-muted-foreground">Chargement...</span>
+                                </div>
+                              ) : filteredRepos.length === 0 ? (
+                                <div className="py-6 text-center text-xs text-muted-foreground">
+                                  Aucun repository trouvé
+                                </div>
+                              ) : (
+                                filteredRepos.map((repo) => (
+                                  <button
+                                    key={repo.id}
+                                    type="button"
+                                    onClick={() => handleSelectRepo(repo, provider.key)}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted transition-colors ${
+                                      selectedRepoUrl === repo.url ? "bg-muted" : ""
+                                    }`}
+                                  >
+                                    <GitBranch className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium truncate">{repo.full_name}</p>
+                                      <p className="text-[10px] text-muted-foreground">
+                                        {repo.default_branch} · {repo.private ? "Privé" : "Public"}
+                                      </p>
+                                    </div>
+                                    {selectedRepoUrl === repo.url && (
+                                      <Check className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                                    )}
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {integrationsLoading && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Chargement des intégrations...
+              </div>
+            )}
           </section>
 
-          {/* Jira */}
+          {/* ─── JIRA INTEGRATION ─── */}
           <section className="panel shadow-soft p-6 space-y-4">
             <h2 className="text-sm font-semibold flex items-center gap-2">
               <LayoutGrid className="w-4 h-4" />
               Jira / Atlassian
             </h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                  Base URL
-                </label>
-                <input
-                  type="text"
-                  value={jiraBaseUrl}
-                  onChange={(e) => setJiraBaseUrl(e.target.value)}
-                  placeholder="https://team.atlassian.net"
-                  className="input-clean w-full"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                  Project Key
-                </label>
-                <input
-                  type="text"
-                  value={jiraKey}
-                  onChange={(e) => setJiraKey(e.target.value)}
-                  placeholder="PROJ"
-                  className="input-clean w-full"
-                />
-              </div>
+
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Connectez Jira pour synchroniser les projets et tickets.
+              </p>
+
+              {integrations.jira?.connected ? (
+                <div className="space-y-3">
+                  {/* Connected badge */}
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-800 text-xs font-medium w-fit">
+                    <Check className="w-3 h-3" />
+                    Jira connecté
+                    {integrations.jira.account_name && (
+                      <span className="text-green-600 font-normal">({integrations.jira.account_name})</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDisconnect("jira")}
+                      disabled={disconnecting === "jira"}
+                      className="ml-1 p-0.5 rounded hover:bg-green-100 text-green-600 hover:text-red-500 transition-colors"
+                      title="Déconnecter"
+                    >
+                      {disconnecting === "jira" ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Unplug className="w-3 h-3" />
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Jira project selector */}
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-medium text-muted-foreground block">
+                      Projet Jira sélectionné
+                    </label>
+
+                    {selectedJiraKey ? (
+                      <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                        <LayoutGrid className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium">{selectedJiraKey}</p>
+                          {selectedJiraBaseUrl && (
+                            <p className="text-[10px] text-muted-foreground truncate">{selectedJiraBaseUrl}</p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedJiraKey("");
+                            setSelectedJiraBaseUrl("");
+                          }}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">Aucun projet sélectionné</p>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowJiraSelector(!showJiraSelector);
+                        setJiraSearch("");
+                        if (!showJiraSelector) {
+                          loadJiraProjects();
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-foreground font-medium hover:underline"
+                    >
+                      <Search className="w-3 h-3" />
+                      Parcourir les projets Jira
+                      <ChevronDown className={`w-3 h-3 transition-transform ${showJiraSelector ? "rotate-180" : ""}`} />
+                    </button>
+
+                    <AnimatePresence>
+                      {showJiraSelector && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-1 border border-border rounded-xl overflow-hidden bg-white">
+                            {/* Search */}
+                            <div className="p-2 border-b border-border-light">
+                              <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                <input
+                                  type="text"
+                                  value={jiraSearch}
+                                  onChange={(e) => setJiraSearch(e.target.value)}
+                                  placeholder="Rechercher un projet Jira..."
+                                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted rounded-lg outline-none focus:ring-1 focus:ring-foreground/20"
+                                  autoFocus
+                                />
+                              </div>
+                            </div>
+
+                            {/* List */}
+                            <div className="max-h-60 overflow-y-auto">
+                              {jiraProjectsLoading ? (
+                                <div className="flex items-center justify-center py-6">
+                                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                                  <span className="ml-2 text-xs text-muted-foreground">Chargement...</span>
+                                </div>
+                              ) : filteredJiraProjects.length === 0 ? (
+                                <div className="py-6 text-center text-xs text-muted-foreground">
+                                  Aucun projet Jira trouvé
+                                </div>
+                              ) : (
+                                filteredJiraProjects.map((proj) => (
+                                  <button
+                                    key={proj.id}
+                                    type="button"
+                                    onClick={() => handleSelectJiraProject(proj)}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted transition-colors ${
+                                      selectedJiraKey === proj.key ? "bg-muted" : ""
+                                    }`}
+                                  >
+                                    {proj.avatar ? (
+                                      <img src={proj.avatar} alt="" className="w-5 h-5 rounded flex-shrink-0" />
+                                    ) : (
+                                      <LayoutGrid className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium">{proj.name}</p>
+                                      <p className="text-[10px] text-muted-foreground">
+                                        {proj.key} · {proj.projectType}
+                                      </p>
+                                    </div>
+                                    {selectedJiraKey === proj.key && (
+                                      <Check className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                                    )}
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleConnect("jira")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:opacity-90 transition-opacity"
+                >
+                  <Link2 className="w-3 h-3" />
+                  Connecter Jira
+                </button>
+              )}
             </div>
           </section>
 
