@@ -120,6 +120,17 @@ interface AppState {
   addDomModification: (mod: DomModification) => void;
   clearDomModifications: () => void;
 
+  // Story selection (Prioritize & Ship phases)
+  selectedStoryId: string | null;
+  setSelectedStoryId: (id: string | null) => void;
+  selectStoryForEditing: (id: string | null) => void;
+
+  // Shared filters (Prioritize & Ship phases)
+  filterEpic: string;
+  filterStatus: string;
+  setFilterEpic: (epic: string) => void;
+  setFilterStatus: (status: string) => void;
+
   // Onboarding
   isOnboarded: boolean;
   setOnboarded: (onboarded: boolean) => void;
@@ -445,6 +456,31 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => ({ domModifications: [...state.domModifications, mod] })),
   clearDomModifications: () => set({ domModifications: [] }),
 
+  // Story selection (Prioritize & Ship)
+  selectedStoryId: null,
+  setSelectedStoryId: (id) => set({ selectedStoryId: id }),
+  selectStoryForEditing: (id) => {
+    if (id === null) {
+      set({ selectedStoryId: null });
+      return;
+    }
+    const state = get();
+    // Save any pending edits first
+    if (state.currentStory.title) {
+      state.saveCurrentStory();
+    }
+    const story = state.stories.find((s) => s.id === id);
+    if (story) {
+      set({ selectedStoryId: id, currentStory: { ...story } });
+    }
+  },
+
+  // Shared filters (Prioritize & Ship)
+  filterEpic: "all",
+  filterStatus: "all",
+  setFilterEpic: (epic) => set({ filterEpic: epic }),
+  setFilterStatus: (status) => set({ filterStatus: status }),
+
   // Onboarding
   isOnboarded: false,
   setOnboarded: (onboarded) => set({ isOnboarded: onboarded }),
@@ -474,5 +510,8 @@ export const useStore = create<AppState>((set, get) => ({
       centerPanelFullscreen: false,
       rightPanelFullscreen: false,
       viewMode: "live-tagging",
+      selectedStoryId: null,
+      filterEpic: "all",
+      filterStatus: "all",
     }),
 }));

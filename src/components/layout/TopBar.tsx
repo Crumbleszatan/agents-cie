@@ -38,6 +38,9 @@ export function TopBar() {
   const setSelectedPageUrl = useStore((s) => s.setSelectedPageUrl);
   const setProject = useStore((s) => s.setProject);
   const resetForProjectSwitch = useStore((s) => s.resetForProjectSwitch);
+  const setSelectedStoryId = useStore((s) => s.setSelectedStoryId);
+  const setFilterEpic = useStore((s) => s.setFilterEpic);
+  const setFilterStatus = useStore((s) => s.setFilterStatus);
 
   const { user, signOut } = useAuth();
   const { currentOrg } = useOrganization();
@@ -124,8 +127,15 @@ export function TopBar() {
   const handlePhaseChange = (phase: AppPhase) => {
     // Disable Prioritize and Ship when no stories exist
     if (phase !== "build" && stories.length === 0) return;
+    // Save pending edits when leaving Build
     if (appPhase === "build" && phase !== "build") {
-      saveCurrentStory();
+      if (currentStory.title) saveCurrentStory();
+    }
+    // Reset selection and filters when going back to Build
+    if (phase === "build") {
+      setSelectedStoryId(null);
+      setFilterEpic("all");
+      setFilterStatus("all");
     }
     setAppPhase(phase);
   };

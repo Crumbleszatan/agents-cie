@@ -66,12 +66,23 @@ export function ProductionView() {
   const stories = useStore((s) => s.stories);
   const setAppPhase = useStore((s) => s.setAppPhase);
   const updateStoryInList = useStore((s) => s.updateStoryInList);
+  const filterEpic = useStore((s) => s.filterEpic);
+  const filterStatus = useStore((s) => s.filterStatus);
+  const selectedStoryId = useStore((s) => s.selectedStoryId);
+  const selectStoryForEditing = useStore((s) => s.selectStoryForEditing);
 
   const [expandedRelease, setExpandedRelease] = useState<string | null>(null);
   const [viewTab, setViewTab] = useState<"gantt" | "list">("gantt");
 
-  // Use capsule stories or fallback to store stories
-  const activeStories = capsule?.stories || stories;
+  // Use capsule stories or fallback to store stories, then apply filters
+  const baseStories = capsule?.stories || stories;
+  const activeStories = useMemo(() => {
+    return baseStories.filter((story) => {
+      if (filterEpic !== "all" && story.epicId !== filterEpic) return false;
+      if (filterStatus !== "all" && story.productionStatus !== filterStatus) return false;
+      return true;
+    });
+  }, [baseStories, filterEpic, filterStatus]);
 
   const ganttData = useMemo(() => generateGanttData(activeStories), [activeStories]);
 
@@ -170,6 +181,8 @@ export function ProductionView() {
             timelineStart={timelineStart}
             totalDays={totalDays}
             statusColors={statusColors}
+            selectedStoryId={selectedStoryId}
+            onSelectStory={selectStoryForEditing}
           />
         ) : (
           <ListView
@@ -177,6 +190,8 @@ export function ProductionView() {
             fullAiStories={fullAiStories}
             engineerStories={engineerStories}
             statusColors={statusColors}
+            selectedStoryId={selectedStoryId}
+            onSelectStory={selectStoryForEditing}
           />
         )}
       </div>
@@ -255,11 +270,15 @@ function GanttView({
   timelineStart,
   totalDays,
   statusColors,
+  selectedStoryId,
+  onSelectStory,
 }: {
   ganttData: ReturnType<typeof generateGanttData>;
   timelineStart: Date;
   totalDays: number;
   statusColors: Record<string, { bg: string; text: string; icon: typeof Circle }>;
+  selectedStoryId: string | null;
+  onSelectStory: (id: string | null) => void;
 }) {
   // Generate day markers
   const dayMarkers: { day: number; date: Date }[] = [];
@@ -303,7 +322,10 @@ function GanttView({
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="flex items-center h-10 group"
+                className={`flex items-center h-10 group cursor-pointer rounded-lg px-1 transition-colors ${
+                  selectedStoryId === story.id ? "bg-muted/60 ring-1 ring-foreground/20" : "hover:bg-muted/30"
+                }`}
+                onClick={() => onSelectStory(story.id)}
               >
                 {/* Label */}
                 <div className="w-[220px] flex-shrink-0 flex items-center gap-2 pr-3">
@@ -382,11 +404,15 @@ function ListView({
   fullAiStories,
   engineerStories,
   statusColors,
+  selectedStoryId,
+  onSelectStory,
 }: {
   stories: UserStory[];
   fullAiStories: UserStory[];
   engineerStories: UserStory[];
   statusColors: Record<string, { bg: string; text: string; icon: typeof Circle }>;
+  selectedStoryId: string | null;
+  onSelectStory: (id: string | null) => void;
 }) {
   const [expandAi, setExpandAi] = useState(true);
   const [expandEngineer, setExpandEngineer] = useState(true);
@@ -413,7 +439,7 @@ function ListView({
               className="overflow-hidden space-y-1.5 ml-5"
             >
               {fullAiStories.map((story) => (
-                <StoryListItem key={story.id} story={story} statusColors={statusColors} />
+                <StoryListItem key={story.id} story={story} statusColors={statusColors} isSelected={selectedStoryId === story.id} onSelect={() => onSelectStory(story.id)} />
               ))}
               {fullAiStories.length === 0 && (
                 <p className="text-xs text-muted-foreground/50 py-2">Aucune US Full IA</p>
@@ -447,7 +473,7 @@ function ListView({
               className="overflow-hidden space-y-1.5 ml-5"
             >
               {engineerStories.map((story) => (
-                <StoryListItem key={story.id} story={story} statusColors={statusColors} />
+                <StoryListItem key={story.id} story={story} statusColors={statusColors} isSelected={selectedStoryId === story.id} onSelect={() => onSelectStory(story.id)} />
               ))}
               {engineerStories.length === 0 && (
                 <p className="text-xs text-muted-foreground/50 py-2">Aucune US Engineer + IA</p>
@@ -463,16 +489,27 @@ function ListView({
 function StoryListItem({
   story,
   statusColors,
+  isSelected,
+  onSelect,
 }: {
   story: UserStory;
   statusColors: Record<string, { bg: string; text: string; icon: typeof Circle }>;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }) {
   const status = statusColors[story.productionStatus] || statusColors.backlog;
   const StatusIcon = status.icon;
   const isFullAi = story.productionMode === "full-ai";
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-border-light hover:shadow-sm transition-all group">
+    <div
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all group cursor-pointer ${
+        isSelected
+          ? "border-foreground/30 bg-muted/50 ring-1 ring-foreground/20 shadow-sm"
+          : "border-border-light hover:shadow-sm"
+      }`}
+      onClick={onSelect}
+    >
       <div className={`p-1 rounded-md ${status.bg}`}>
         <StatusIcon className={`w-3.5 h-3.5 ${status.text}`} />
       </div>

@@ -8,7 +8,6 @@ import {
   Bot,
   Wrench,
   RotateCcw,
-  Filter,
 } from "lucide-react";
 
 const DOT_SIZE = 48;
@@ -19,16 +18,16 @@ export function MatrixView() {
   const updateStoryMatrixPosition = useStore((s) => s.updateStoryMatrixPosition);
   const project = useStore((s) => s.project);
 
+  const selectedStoryId = useStore((s) => s.selectedStoryId);
+  const selectStoryForEditing = useStore((s) => s.selectStoryForEditing);
+  const filterEpic = useStore((s) => s.filterEpic);
+  const filterStatus = useStore((s) => s.filterStatus);
+
   const matrixRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [selectedStory, setSelectedStory] = useState<string | null>(null);
   const [hoveredStory, setHoveredStory] = useState<string | null>(null);
   const [matrixSize, setMatrixSize] = useState(500);
-
-  // Filters
-  const [filterEpic, setFilterEpic] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
 
   // Responsive matrix size
   useEffect(() => {
@@ -66,9 +65,9 @@ export function MatrixView() {
     (e: React.MouseEvent, storyId: string) => {
       e.preventDefault();
       setDraggingId(storyId);
-      setSelectedStory(storyId);
+      selectStoryForEditing(storyId);
     },
-    []
+    [selectStoryForEditing]
   );
 
   // Only allow vertical (impact) dragging — effort (X) stays fixed
@@ -119,8 +118,6 @@ export function MatrixView() {
     });
   };
 
-  const selectedStoryData = stories.find((s) => s.id === selectedStory);
-
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -134,44 +131,13 @@ export function MatrixView() {
             {filteredStories.length} / {stories.length} US · Glissez verticalement pour ajuster l&apos;impact
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Epic filter */}
-          <div className="flex items-center gap-1">
-            <Filter className="w-3 h-3 text-muted-foreground" />
-            <select
-              value={filterEpic}
-              onChange={(e) => setFilterEpic(e.target.value)}
-              className="text-[11px] bg-muted rounded-lg px-2 py-1 border-0 outline-none cursor-pointer"
-            >
-              <option value="all">Tous les Epics</option>
-              {epics.map((epic) => (
-                <option key={epic.id} value={epic.id}>{epic.title}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status filter */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="text-[11px] bg-muted rounded-lg px-2 py-1 border-0 outline-none cursor-pointer"
-          >
-            <option value="all">Tous les statuts</option>
-            <option value="backlog">Backlog</option>
-            <option value="planned">Planned</option>
-            <option value="in-progress">In Progress</option>
-            <option value="review">Review</option>
-            <option value="done">Done</option>
-          </select>
-
-          <button
-            onClick={handleAutoPlace}
-            className="btn-secondary flex items-center gap-1.5 text-xs"
-          >
-            <RotateCcw className="w-3 h-3" />
-            Auto-placer
-          </button>
-        </div>
+        <button
+          onClick={handleAutoPlace}
+          className="btn-secondary flex items-center gap-1.5 text-xs"
+        >
+          <RotateCcw className="w-3 h-3" />
+          Auto-placer
+        </button>
       </div>
 
       {/* Matrix Area */}
@@ -231,11 +197,11 @@ export function MatrixView() {
                   onMouseLeave={() => setHoveredStory(null)}
                   whileHover={{ scale: 1.15 }}
                   animate={{
-                    scale: draggingId === story.id ? 1.2 : selectedStory === story.id ? 1.1 : 1,
+                    scale: draggingId === story.id ? 1.2 : selectedStoryId === story.id ? 1.1 : 1,
                     boxShadow:
                       draggingId === story.id
                         ? "0 8px 24px rgba(0,0,0,0.15)"
-                        : selectedStory === story.id
+                        : selectedStoryId === story.id
                         ? "0 4px 12px rgba(0,0,0,0.1)"
                         : "0 1px 4px rgba(0,0,0,0.06)",
                   }}
@@ -246,7 +212,7 @@ export function MatrixView() {
                       isFullAi
                         ? "bg-violet-50 border-violet-300"
                         : "bg-amber-50 border-amber-300"
-                    } ${selectedStory === story.id ? "ring-2 ring-foreground ring-offset-2" : ""}`}
+                    } ${selectedStoryId === story.id ? "ring-2 ring-foreground ring-offset-2" : ""}`}
                   >
                     {isFullAi ? (
                       <Bot className="w-5 h-5 text-violet-600" />

@@ -6,6 +6,8 @@ import { CenterPreview } from "@/components/preview/CenterPreview";
 import { USPanel } from "@/components/us-panel/USPanel";
 import { MatrixView } from "@/components/matrix/MatrixView";
 import { ProductionView } from "@/components/production/ProductionView";
+import { StoryListPanel } from "@/components/story-list/StoryListPanel";
+import { StoryDetailPanel } from "@/components/story-detail/StoryDetailPanel";
 import { TopBar } from "@/components/layout/TopBar";
 import { useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -82,12 +84,12 @@ export function MainLayout() {
         ref={containerRef}
         className="flex-1 flex overflow-hidden p-2 gap-2"
       >
-        {/* Left: Chat Panel — always visible */}
+        {/* Left Panel: Chat (Build) or StoryList (Prioritize/Ship) */}
         <div
           className="panel shadow-soft overflow-hidden flex flex-col"
           style={{ width: leftPanelWidth, minWidth: leftPanelWidth }}
         >
-          <ChatPanel />
+          {appPhase === "build" ? <ChatPanel /> : <StoryListPanel />}
         </div>
 
         {/* Left Resize Handle */}
@@ -178,7 +180,7 @@ export function MainLayout() {
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
             )}
-            <USPanel />
+            {appPhase === "build" ? <USPanel /> : <StoryDetailPanel />}
           </div>
         )}
       </div>
