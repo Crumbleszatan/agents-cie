@@ -106,6 +106,7 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   type: "text" | "question" | "suggestion" | "preview" | "architecture";
+  storyId?: string; // links message to a UserStory
   metadata?: {
     questionType?: string;
     options?: string[];

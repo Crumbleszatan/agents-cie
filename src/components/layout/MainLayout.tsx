@@ -9,6 +9,7 @@ import { ProductionView } from "@/components/production/ProductionView";
 import { StoryListPanel } from "@/components/story-list/StoryListPanel";
 import { StoryDetailPanel } from "@/components/story-detail/StoryDetailPanel";
 import { StorySyncProvider } from "@/components/providers/StorySyncProvider";
+import { ChatSyncProvider } from "@/components/providers/ChatSyncProvider";
 import { TopBar } from "@/components/layout/TopBar";
 import { useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -81,6 +82,7 @@ export function MainLayout() {
     <div className="h-full flex flex-col bg-[#fafafa]">
       <TopBar />
       <StorySyncProvider />
+      <ChatSyncProvider />
 
       <div
         ref={containerRef}

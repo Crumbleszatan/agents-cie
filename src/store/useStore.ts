@@ -77,8 +77,19 @@ interface AppState {
   messages: ChatMessage[];
   addMessage: (message: ChatMessage) => void;
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
+  setMessagesFromDb: (messages: ChatMessage[]) => void;
   isAiTyping: boolean;
   setAiTyping: (typing: boolean) => void;
+
+  // Chat persistence callbacks (set by ChatSyncProvider)
+  _persistMsgCreate: ((msg: ChatMessage) => Promise<ChatMessage | null>) | null;
+  _persistMsgUpdate: ((id: string, updates: Partial<ChatMessage>) => Promise<void>) | null;
+  _persistMsgLink: ((clientId: string, dbId: string) => Promise<void>) | null;
+  setChatPersistCallbacks: (cbs: {
+    create: (msg: ChatMessage) => Promise<ChatMessage | null>;
+    update: (id: string, updates: Partial<ChatMessage>) => Promise<void>;
+    link: (clientId: string, dbId: string) => Promise<void>;
+  } | null) => void;
 
   // Conversation
   context: ConversationContext;
@@ -328,7 +339,16 @@ export const useStore = create<AppState>((set, get) => ({
                 s.currentStory.id === storyWithEffort.id
                   ? { ...s.currentStory, id: dbStory.id }
                   : s.currentStory,
+              // Also update messages storyId
+              messages: s.messages.map((m) =>
+                m.storyId === storyWithEffort.id ? { ...m, storyId: dbStory.id } : m
+              ),
             }));
+            // Backfill in DB
+            const latestState = get();
+            if (latestState._persistMsgLink) {
+              latestState._persistMsgLink(storyWithEffort.id, dbStory.id).catch(console.error);
+            }
           }
         }).catch(console.error);
       }
@@ -339,7 +359,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (state.currentStory.title) {
       state.saveCurrentStory();
     }
-    set({ currentStory: createDefaultStory() });
+    set({ currentStory: createDefaultStory(), messages: [], context: defaultContext });
   },
   editStory: (id) => {
     const state = get();
@@ -448,16 +468,41 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Chat
   messages: [],
-  addMessage: (message) =>
-    set((state) => ({ messages: [...state.messages, message] })),
-  updateMessage: (id, updates) =>
+  addMessage: (message) => {
+    const state = get();
+    const enriched = { ...message, storyId: message.storyId || state.currentStory.id };
+    set((s) => ({ messages: [...s.messages, enriched] }));
+    // Persist to DB
+    if (state._persistMsgCreate) {
+      state._persistMsgCreate(enriched).catch(console.error);
+    }
+  },
+  updateMessage: (id, updates) => {
     set((state) => ({
       messages: state.messages.map((m) =>
         m.id === id ? { ...m, ...updates } : m
       ),
-    })),
+    }));
+    const state = get();
+    if (state._persistMsgUpdate) {
+      state._persistMsgUpdate(id, updates).catch(console.error);
+    }
+  },
+  setMessagesFromDb: (messages) => set({ messages }),
   isAiTyping: false,
   setAiTyping: (typing) => set({ isAiTyping: typing }),
+
+  // Chat persistence callbacks (set by ChatSyncProvider)
+  _persistMsgCreate: null,
+  _persistMsgUpdate: null,
+  _persistMsgLink: null,
+  setChatPersistCallbacks: (cbs) => {
+    if (cbs) {
+      set({ _persistMsgCreate: cbs.create, _persistMsgUpdate: cbs.update, _persistMsgLink: cbs.link });
+    } else {
+      set({ _persistMsgCreate: null, _persistMsgUpdate: null, _persistMsgLink: null });
+    }
+  },
 
   // Conversation
   context: defaultContext,
@@ -579,5 +624,8 @@ export const useStore = create<AppState>((set, get) => ({
       selectedStoryId: null,
       filterEpic: "all",
       filterStatus: "all",
+      _persistMsgCreate: null,
+      _persistMsgUpdate: null,
+      _persistMsgLink: null,
     }),
 }));

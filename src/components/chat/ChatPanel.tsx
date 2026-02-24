@@ -15,8 +15,10 @@ import {
   Square,
   CheckSquare,
   PenLine,
+  History,
 } from "lucide-react";
 import type { ChatMessage } from "@/types";
+import { ChatHistory } from "./ChatHistory";
 
 export function ChatPanel() {
   const messages = useStore((s) => s.messages);
@@ -33,8 +35,12 @@ export function ChatPanel() {
   const setSelectedPageUrl = useStore((s) => s.setSelectedPageUrl);
   const setHighlightSelector = useStore((s) => s.setHighlightSelector);
   const setDomModifications = useStore((s) => s.setDomModifications);
+  const currentStoryTitle = useStore((s) => s.currentStory.title);
+  const currentStoryId = useStore((s) => s.currentStory.id);
+  const stories = useStore((s) => s.stories);
 
   const [input, setInput] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -51,6 +57,7 @@ export function ChatPanel() {
         content: `Bonjour ! Je suis prêt à vous aider à construire votre besoin pour **${project.name}**.\n\nDécrivez-moi la fonctionnalité que vous souhaitez développer. Je vous guiderai étape par étape en tenant compte de votre contexte technique et métier.`,
         timestamp: new Date(),
         type: "text",
+        storyId: currentStoryId,
       };
       addMessage(welcomeMessage);
     }
@@ -189,85 +196,113 @@ export function ChatPanel() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border-light">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-foreground flex items-center justify-center">
-            <Sparkles className="w-3.5 h-3.5 text-white" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-foreground flex items-center justify-center">
+              <Sparkles className="w-3.5 h-3.5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold">Assistant IA</h2>
+              {currentStoryTitle && (
+                <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">
+                  {currentStoryTitle}
+                </p>
+              )}
+            </div>
           </div>
-          <div>
-            <h2 className="text-sm font-semibold">Assistant IA</h2>
-          </div>
+          {stories.length > 0 && (
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className={`p-1.5 rounded-lg transition-colors ${
+                showHistory
+                  ? "bg-foreground text-white"
+                  : "hover:bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+              title="Historique des conversations"
+            >
+              <History className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-3 space-y-4">
-        <AnimatePresence initial={false}>
-          {messages.map((msg) => (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              <div className="max-w-[92%]">
-                {/* Message bubble */}
-                <div
-                  className={
-                    msg.role === "user"
-                      ? "bg-foreground text-white rounded-2xl rounded-br-md px-4 py-2.5"
-                      : "bg-muted rounded-2xl rounded-bl-md px-4 py-2.5"
-                  }
+      {/* History or Messages */}
+      {showHistory ? (
+        <ChatHistory onClose={() => setShowHistory(false)} />
+      ) : (
+        <>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-3 space-y-4">
+            <AnimatePresence initial={false}>
+              {messages.map((msg) => (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
-                  <MessageContent content={msg.content} />
-                </div>
+                  <div className="max-w-[92%]">
+                    {/* Message bubble */}
+                    <div
+                      className={
+                        msg.role === "user"
+                          ? "bg-foreground text-white rounded-2xl rounded-br-md px-4 py-2.5"
+                          : "bg-muted rounded-2xl rounded-bl-md px-4 py-2.5"
+                      }
+                    >
+                      <MessageContent content={msg.content} />
+                    </div>
 
-                {/* Options */}
-                {msg.role === "assistant" &&
-                  msg.metadata?.options &&
-                  msg.metadata.options.length > 0 && (
-                    <OptionsSelector
-                      messageId={msg.id}
-                      options={msg.metadata.options}
-                      selectionMode={msg.metadata.selectionMode || "single"}
-                      answered={msg.optionsAnswered || false}
-                      onSubmit={(answer) => handleOptionSubmit(msg.id, answer)}
-                    />
-                  )}
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+                    {/* Options */}
+                    {msg.role === "assistant" &&
+                      msg.metadata?.options &&
+                      msg.metadata.options.length > 0 && (
+                        <OptionsSelector
+                          messageId={msg.id}
+                          options={msg.metadata.options}
+                          selectionMode={msg.metadata.selectionMode || "single"}
+                          answered={msg.optionsAnswered || false}
+                          onSubmit={(answer) => handleOptionSubmit(msg.id, answer)}
+                        />
+                      )}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
 
-        {/* Typing indicator */}
-        <AnimatePresence>
-          {isAiTyping && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              className="flex justify-start"
-            >
-              <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
-                <div className="flex items-center gap-1.5">
-                  {[0, 0.2, 0.4].map((delay) => (
-                    <motion.div
-                      key={delay}
-                      className="w-1.5 h-1.5 rounded-full bg-muted-foreground"
-                      animate={{ opacity: [0.3, 1, 0.3] }}
-                      transition={{ duration: 1.2, repeat: Infinity, delay }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            {/* Typing indicator */}
+            <AnimatePresence>
+              {isAiTyping && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className="flex justify-start"
+                >
+                  <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
+                    <div className="flex items-center gap-1.5">
+                      {[0, 0.2, 0.4].map((delay) => (
+                        <motion.div
+                          key={delay}
+                          className="w-1.5 h-1.5 rounded-full bg-muted-foreground"
+                          animate={{ opacity: [0.3, 1, 0.3] }}
+                          transition={{ duration: 1.2, repeat: Infinity, delay }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-        <div ref={messagesEndRef} />
-      </div>
+            <div ref={messagesEndRef} />
+          </div>
+        </>
+      )}
 
-      {/* Input Area */}
+      {/* Input Area — hidden when history is open */}
+      {!showHistory && (
       <div className="p-3 border-t border-border-light">
         <div className="flex items-end gap-2 bg-muted rounded-2xl px-3 py-2">
           <button className="p-1.5 rounded-lg hover:bg-white/60 transition-colors text-muted-foreground">
@@ -301,6 +336,7 @@ export function ChatPanel() {
           </span>
         </div>
       </div>
+      )}
     </div>
   );
 }
