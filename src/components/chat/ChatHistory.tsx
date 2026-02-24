@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useStore } from "@/store/useStore";
 import { useMessages } from "@/hooks/useMessages";
+import { useStories } from "@/hooks/useStories";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Search, MessageSquare, X } from "lucide-react";
 import type { ChatMessage, UserStory } from "@/types";
@@ -22,21 +23,25 @@ export function ChatHistory({ onClose }: { onClose: () => void }) {
   const storeMessages = useStore((s) => s.messages);
 
   const { allMessages, searchMessages } = useMessages(currentProjectId);
+  const { stories: dbStories } = useStories(currentProjectId);
 
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<ChatMessage[] | null>(null);
   const [searching, setSearching] = useState(false);
 
-  // Build a lookup map that includes saved stories + current unsaved story
+  // Build a lookup map: DB stories + Zustand stories + current unsaved story
   const storyMap = useMemo(() => {
     const map = new Map<string, UserStory>();
+    // DB stories (most complete source)
+    for (const s of dbStories) map.set(s.id, s);
+    // Zustand store stories (may have local changes)
     for (const s of stories) map.set(s.id, s);
-    // Also include the current story if it has messages (even if unsaved / no title yet)
+    // Current unsaved story
     if (!map.has(currentStoryId) && storeMessages.length > 0) {
       map.set(currentStoryId, currentStory);
     }
     return map;
-  }, [stories, currentStoryId, currentStory, storeMessages.length]);
+  }, [dbStories, stories, currentStoryId, currentStory, storeMessages.length]);
 
   // Merge DB messages with current in-memory messages (for unsaved story)
   const mergedMessages = useMemo(() => {
@@ -60,8 +65,19 @@ export function ChatHistory({ onClose }: { onClose: () => void }) {
 
     const result: StoryConversation[] = [];
     for (const [storyId, msgs] of grouped) {
-      const story = storyMap.get(storyId);
-      if (!story || msgs.length === 0) continue;
+      if (msgs.length === 0) continue;
+      // Use known story or build a placeholder for orphan messages
+      const story = storyMap.get(storyId) ?? {
+        id: storyId,
+        title: "",
+        asA: "", iWant: "", soThat: "",
+        acceptanceCriteria: [], subtasks: [],
+        storyPoints: null, priority: "medium" as const,
+        labels: [], affectedPages: [], affectedServices: [], definitionOfDone: [],
+        status: "draft" as const, effort: 0, impact: 0,
+        productionMode: "engineer-ai" as const, productionStatus: "backlog",
+        linesOfCode: 0, completionPercent: 0,
+      };
       const sorted = msgs.sort(
         (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
       );

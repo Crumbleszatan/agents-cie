@@ -16,7 +16,8 @@ import {
   CheckSquare,
   PenLine,
   History,
-  RotateCcw,
+  Eraser,
+  Trash2,
 } from "lucide-react";
 import type { ChatMessage } from "@/types";
 import { ChatHistory } from "./ChatHistory";
@@ -40,9 +41,13 @@ export function ChatPanel() {
   const currentStoryId = useStore((s) => s.currentStory.id);
   const stories = useStore((s) => s.stories);
   const startNewStory = useStore((s) => s.startNewStory);
+  const removeStory = useStore((s) => s.removeStory);
 
   const [input, setInput] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [showConfirmReset, setShowConfirmReset] = useState(false);
+
+  const isSavedStory = stories.some((s) => s.id === currentStoryId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -213,33 +218,80 @@ export function ChatPanel() {
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {/* Reset chat — visible when there are messages on an unsaved story */}
-            {messages.length > 0 && !stories.find((s) => s.id === currentStoryId) && (
+            {/* Reset (unsaved) or Delete (saved) */}
+            {messages.length > 0 && (
               <button
-                onClick={startNewStory}
+                onClick={() => setShowConfirmReset(true)}
                 className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                title="Nouvelle conversation"
+                title={isSavedStory ? "Supprimer cette US" : "Réinitialiser le chat"}
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                {isSavedStory ? (
+                  <Trash2 className="w-3.5 h-3.5" />
+                ) : (
+                  <Eraser className="w-3.5 h-3.5" />
+                )}
               </button>
             )}
             {/* History toggle */}
-            {stories.length > 0 && (
-              <button
-                onClick={() => setShowHistory(!showHistory)}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  showHistory
-                    ? "bg-foreground text-white"
-                    : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-                title="Historique des conversations"
-              >
-                <History className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className={`p-1.5 rounded-lg transition-colors ${
+                showHistory
+                  ? "bg-foreground text-white"
+                  : "hover:bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+              title="Historique des conversations"
+            >
+              <History className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Confirmation popup */}
+      <AnimatePresence>
+        {showConfirmReset && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden border-b border-border-light"
+          >
+            <div className="px-4 py-3 bg-red-50/50">
+              <p className="text-[12px] font-medium text-foreground mb-1">
+                {isSavedStory
+                  ? "Supprimer cette User Story ?"
+                  : "Réinitialiser la conversation ?"}
+              </p>
+              <p className="text-[11px] text-muted-foreground mb-3">
+                {isSavedStory
+                  ? "L'US et ses messages seront supprimés définitivement."
+                  : "Le travail en cours sera perdu. Cette action est irréversible."}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (isSavedStory) {
+                      removeStory(currentStoryId);
+                    }
+                    startNewStory();
+                    setShowConfirmReset(false);
+                  }}
+                  className="px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
+                >
+                  {isSavedStory ? "Supprimer" : "Réinitialiser"}
+                </button>
+                <button
+                  onClick={() => setShowConfirmReset(false)}
+                  className="px-3 py-1.5 text-[11px] font-medium rounded-lg bg-white border border-border-light hover:bg-muted transition-colors"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* History or Messages */}
       {showHistory ? (

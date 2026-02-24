@@ -10,6 +10,7 @@ import { StoryListPanel } from "@/components/story-list/StoryListPanel";
 import { StoryDetailPanel } from "@/components/story-detail/StoryDetailPanel";
 import { StorySyncProvider } from "@/components/providers/StorySyncProvider";
 import { ChatSyncProvider } from "@/components/providers/ChatSyncProvider";
+import { EpicSyncProvider } from "@/components/providers/EpicSyncProvider";
 import { TopBar } from "@/components/layout/TopBar";
 import { useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -83,6 +84,7 @@ export function MainLayout() {
       <TopBar />
       <StorySyncProvider />
       <ChatSyncProvider />
+      <EpicSyncProvider />
 
       <div
         ref={containerRef}

@@ -60,6 +60,11 @@ interface AppState {
   addEpic: (epic: Epic) => void;
   updateEpic: (id: string, updates: Partial<Epic>) => void;
   removeEpic: (id: string) => void;
+  setEpicsFromDb: (epics: Epic[]) => void;
+  _persistEpicCreate: ((epic: Partial<Epic>) => Promise<Epic | null>) | null;
+  _persistEpicUpdate: ((id: string, updates: Partial<Epic>) => Promise<Epic | null>) | null;
+  _persistEpicDelete: ((id: string) => Promise<{ error: any }>) | null;
+  setEpicPersistCallbacks: (cbs: { create: any; update: any; delete_: any } | null) => void;
 
   // Capsule
   capsule: Capsule | null;
@@ -374,22 +379,66 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Epics
   epics: [],
-  addEpic: (epic) =>
-    set((state) => ({ epics: [...state.epics, epic] })),
-  updateEpic: (id, updates) =>
+  setEpicsFromDb: (epics) => set({ epics }),
+  _persistEpicCreate: null,
+  _persistEpicUpdate: null,
+  _persistEpicDelete: null,
+  setEpicPersistCallbacks: (cbs) => {
+    if (cbs) {
+      set({
+        _persistEpicCreate: cbs.create,
+        _persistEpicUpdate: cbs.update,
+        _persistEpicDelete: cbs.delete_,
+      });
+    } else {
+      set({
+        _persistEpicCreate: null,
+        _persistEpicUpdate: null,
+        _persistEpicDelete: null,
+      });
+    }
+  },
+  addEpic: (epic) => {
+    set((state) => ({ epics: [...state.epics, epic] }));
+    const state = get();
+    if (state._persistEpicCreate) {
+      state._persistEpicCreate(epic).then((dbEpic) => {
+        if (dbEpic && dbEpic.id !== epic.id) {
+          // Replace client ID with DB ID
+          set((s) => ({
+            epics: s.epics.map((e) => (e.id === epic.id ? { ...e, id: dbEpic.id } : e)),
+            // Update any stories referencing the old epic ID
+            stories: s.stories.map((st) =>
+              st.epicId === epic.id ? { ...st, epicId: dbEpic.id } : st
+            ),
+          }));
+        }
+      }).catch(console.error);
+    }
+  },
+  updateEpic: (id, updates) => {
     set((state) => ({
       epics: state.epics.map((e) =>
         e.id === id ? { ...e, ...updates } : e
       ),
-    })),
-  removeEpic: (id) =>
+    }));
+    const state = get();
+    if (state._persistEpicUpdate) {
+      state._persistEpicUpdate(id, updates).catch(console.error);
+    }
+  },
+  removeEpic: (id) => {
     set((state) => ({
       epics: state.epics.filter((e) => e.id !== id),
-      // Also unset epicId on stories that belonged to this epic
       stories: state.stories.map((s) =>
         s.epicId === id ? { ...s, epicId: undefined } : s
       ),
-    })),
+    }));
+    const state = get();
+    if (state._persistEpicDelete) {
+      state._persistEpicDelete(id).catch(console.error);
+    }
+  },
 
   // Capsule
   capsule: null,
@@ -627,5 +676,8 @@ export const useStore = create<AppState>((set, get) => ({
       _persistMsgCreate: null,
       _persistMsgUpdate: null,
       _persistMsgLink: null,
+      _persistEpicCreate: null,
+      _persistEpicUpdate: null,
+      _persistEpicDelete: null,
     }),
 }));
