@@ -20,7 +20,6 @@ import {
   TrendingUp,
   Package,
   Layers,
-  ArrowLeft,
   Timer,
 } from "lucide-react";
 import type { UserStory } from "@/types";
@@ -106,26 +105,16 @@ export function ProductionView() {
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-border-light">
+      <div className="px-4 py-3 border-b border-border-light">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setAppPhase("prioritize")}
-              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <div>
-              <h2 className="text-sm font-semibold flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-foreground flex items-center justify-center">
-                  <Rocket className="w-3.5 h-3.5 text-white" />
-                </div>
-                {capsule?.name || "Production"}
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Séquencement et suivi de production de la capsule
-              </p>
-            </div>
+          <div>
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              <Rocket className="w-3.5 h-3.5" />
+              {capsule?.name || "Production"}
+            </h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Séquencement et suivi de production
+            </p>
           </div>
 
           {/* View toggle */}
@@ -150,12 +139,12 @@ export function ProductionView() {
         </div>
 
         {/* KPI Bar */}
-        <div className="grid grid-cols-5 gap-3 mt-4">
+        <div className="grid grid-cols-3 gap-2 mt-3">
           <KpiCard
             icon={<Layers className="w-3.5 h-3.5" />}
             label="User Stories"
             value={String(activeStories.length)}
-            sub={`${totalPoints} pts total`}
+            sub={`${totalPoints} pts · ${totalLoc.toLocaleString()} LOC`}
           />
           <KpiCard
             icon={<TrendingUp className="w-3.5 h-3.5" />}
@@ -165,22 +154,10 @@ export function ProductionView() {
             highlight
           />
           <KpiCard
-            icon={<Code2 className="w-3.5 h-3.5" />}
-            label="Lignes de code"
-            value={totalLoc.toLocaleString()}
-            sub="depuis Git"
-          />
-          <KpiCard
             icon={<Timer className="w-3.5 h-3.5" />}
             label="Deadline"
             value={formatDate(deadline)}
-            sub={`${totalDays} jours restants`}
-          />
-          <KpiCard
-            icon={<Package className="w-3.5 h-3.5" />}
-            label="Releases"
-            value={String(capsule?.releases?.length || 1)}
-            sub="planifiées"
+            sub={`${totalDays}j · ${capsule?.releases?.length || 1} release(s)`}
           />
         </div>
       </div>
@@ -294,9 +271,9 @@ function GanttView({
 
   return (
     <div className="flex-1 overflow-auto scrollbar-thin">
-      <div className="min-w-[800px] p-5">
+      <div className="min-w-[600px] p-4">
         {/* Timeline header */}
-        <div className="flex items-center h-8 mb-2 ml-[220px] relative border-b border-border-light">
+        <div className="flex items-center h-8 mb-2 ml-[180px] relative border-b border-border-light">
           {dayMarkers.map((marker) => (
             <div
               key={marker.day}

@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap, ArrowLeft, Save, Globe, GitBranch, LayoutGrid,
   FolderKanban, ExternalLink, Trash2, Check, X, Loader2,
-  Link2, Unplug, ChevronDown, Search,
+  Link2, Unplug, ChevronDown, Search, Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -25,6 +25,7 @@ interface ProjectData {
   atlassian_base_url: string | null;
   front_office_url: string | null;
   back_office_url: string | null;
+  training_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -80,6 +81,7 @@ export default function ProjectSettingsPage() {
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [frontOfficeUrl, setFrontOfficeUrl] = useState("");
   const [backOfficeUrl, setBackOfficeUrl] = useState("");
+  const [trainingStatus, setTrainingStatus] = useState("not_started");
 
   // Integration state
   const [integrations, setIntegrations] = useState<Record<string, IntegrationStatus>>({});
@@ -126,6 +128,7 @@ export default function ProjectSettingsPage() {
         setWebsiteUrl(data.website_url || "");
         setFrontOfficeUrl(data.front_office_url || "");
         setBackOfficeUrl(data.back_office_url || "");
+        setTrainingStatus(data.training_status || "not_started");
         setSelectedGitProvider(data.git_provider || null);
         setSelectedRepoUrl(data.git_repo_url || "");
         setSelectedRepoBranch(data.git_default_branch || "main");
@@ -277,6 +280,7 @@ export default function ProjectSettingsPage() {
           atlassian_base_url: selectedJiraBaseUrl || null,
           front_office_url: frontOfficeUrl || null,
           back_office_url: backOfficeUrl || null,
+          training_status: trainingStatus,
         }),
       });
 
@@ -787,6 +791,49 @@ export default function ProjectSettingsPage() {
                   Connecter Jira
                 </button>
               )}
+            </div>
+          </section>
+
+          {/* ─── IA TRAINING ─── */}
+          <section className="panel shadow-soft p-6 space-y-4">
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              <Sparkles className="w-4 h-4" />
+              Entraînement IA
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Définissez le statut de l&apos;entraînement IA pour ce projet. Les fonctionnalités IA Preview et Architecture nécessitent un entraînement complet.
+            </p>
+            <div>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                Statut
+              </label>
+              <select
+                value={trainingStatus}
+                onChange={(e) => setTrainingStatus(e.target.value)}
+                className="input-clean w-full max-w-xs"
+              >
+                <option value="not_started">Non démarré</option>
+                <option value="in_progress">En cours</option>
+                <option value="complete">Terminé</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  trainingStatus === "complete"
+                    ? "bg-green-500"
+                    : trainingStatus === "in_progress"
+                    ? "bg-amber-500 animate-pulse"
+                    : "bg-gray-300"
+                }`}
+              />
+              <span className="text-[11px] text-muted-foreground">
+                {trainingStatus === "complete"
+                  ? "IA prête — toutes les fonctionnalités sont activées"
+                  : trainingStatus === "in_progress"
+                  ? "Entraînement en cours — certaines fonctionnalités sont limitées"
+                  : "Non démarré — IA Preview et Architecture désactivés"}
+              </span>
             </div>
           </section>
 

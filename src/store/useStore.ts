@@ -10,6 +10,10 @@ import type {
   AcceptanceCriterion,
   Capsule,
   Release,
+  Epic,
+  PinnedTag,
+  DomModification,
+  TrainingStatus,
 } from "@/types";
 
 function uuid() {
@@ -51,6 +55,12 @@ interface AppState {
   startNewStory: () => void;
   editStory: (id: string) => void;
 
+  // Epics
+  epics: Epic[];
+  addEpic: (epic: Epic) => void;
+  updateEpic: (id: string, updates: Partial<Epic>) => void;
+  removeEpic: (id: string) => void;
+
   // Capsule
   capsule: Capsule | null;
   createCapsule: (name: string) => void;
@@ -82,11 +92,33 @@ interface AppState {
   highlightSelector: string | null;
   setHighlightSelector: (selector: string | null) => void;
 
-  // Panels
+  // Panel collapse / fullscreen
+  centerPanelFullscreen: boolean;
+  setCenterPanelFullscreen: (fullscreen: boolean) => void;
+  rightPanelFullscreen: boolean;
+  setRightPanelFullscreen: (fullscreen: boolean) => void;
+
+  // Panels sizing
   leftPanelWidth: number;
   rightPanelWidth: number;
   setLeftPanelWidth: (width: number) => void;
   setRightPanelWidth: (width: number) => void;
+
+  // Training status
+  trainingStatus: TrainingStatus;
+  setTrainingStatus: (status: TrainingStatus) => void;
+
+  // Live Tagging — pinned tags
+  pinnedTags: PinnedTag[];
+  addPinnedTag: (tag: PinnedTag) => void;
+  removePinnedTag: (id: string) => void;
+  clearPinnedTags: () => void;
+
+  // IA Preview — DOM modifications
+  domModifications: DomModification[];
+  setDomModifications: (mods: DomModification[]) => void;
+  addDomModification: (mod: DomModification) => void;
+  clearDomModifications: () => void;
 
   // Onboarding
   isOnboarded: boolean;
@@ -135,7 +167,7 @@ function createDefaultStory(): UserStory {
 }
 
 const defaultContext: ConversationContext = {
-  phase: "discovery",
+  phase: "conversation",
   questionsAsked: 0,
   topicsExplored: [],
   currentFocus: "initial",
@@ -268,6 +300,25 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  // Epics
+  epics: [],
+  addEpic: (epic) =>
+    set((state) => ({ epics: [...state.epics, epic] })),
+  updateEpic: (id, updates) =>
+    set((state) => ({
+      epics: state.epics.map((e) =>
+        e.id === id ? { ...e, ...updates } : e
+      ),
+    })),
+  removeEpic: (id) =>
+    set((state) => ({
+      epics: state.epics.filter((e) => e.id !== id),
+      // Also unset epicId on stories that belonged to this epic
+      stories: state.stories.map((s) =>
+        s.epicId === id ? { ...s, epicId: undefined } : s
+      ),
+    })),
+
   // Capsule
   capsule: null,
   createCapsule: (name) => {
@@ -354,18 +405,45 @@ export const useStore = create<AppState>((set, get) => ({
     })),
 
   // View
-  viewMode: "website",
+  viewMode: "live-tagging",
   setViewMode: (mode) => set({ viewMode: mode }),
   selectedPageUrl: "",
   setSelectedPageUrl: (url) => set({ selectedPageUrl: url }),
   highlightSelector: null,
   setHighlightSelector: (selector) => set({ highlightSelector: selector }),
 
-  // Panels
+  // Panel collapse / fullscreen
+  centerPanelFullscreen: false,
+  setCenterPanelFullscreen: (fullscreen) => set({ centerPanelFullscreen: fullscreen }),
+  rightPanelFullscreen: false,
+  setRightPanelFullscreen: (fullscreen) => set({ rightPanelFullscreen: fullscreen }),
+
+  // Panels sizing
   leftPanelWidth: 420,
   rightPanelWidth: 380,
   setLeftPanelWidth: (width) => set({ leftPanelWidth: width }),
   setRightPanelWidth: (width) => set({ rightPanelWidth: width }),
+
+  // Training status
+  trainingStatus: "not_started",
+  setTrainingStatus: (status) => set({ trainingStatus: status }),
+
+  // Live Tagging — pinned tags
+  pinnedTags: [],
+  addPinnedTag: (tag) =>
+    set((state) => ({ pinnedTags: [...state.pinnedTags, tag] })),
+  removePinnedTag: (id) =>
+    set((state) => ({
+      pinnedTags: state.pinnedTags.filter((t) => t.id !== id),
+    })),
+  clearPinnedTags: () => set({ pinnedTags: [] }),
+
+  // IA Preview — DOM modifications
+  domModifications: [],
+  setDomModifications: (mods) => set({ domModifications: mods }),
+  addDomModification: (mod) =>
+    set((state) => ({ domModifications: [...state.domModifications, mod] })),
+  clearDomModifications: () => set({ domModifications: [] }),
 
   // Onboarding
   isOnboarded: false,
@@ -377,7 +455,7 @@ export const useStore = create<AppState>((set, get) => ({
   currentProjectId: null,
   setCurrentProjectId: (id) => set({ currentProjectId: id }),
 
-  // Reset workspace for project switch — clear chat, stories, current story
+  // Reset workspace for project switch — clear all transient state
   resetForProjectSwitch: () =>
     set({
       messages: [],
@@ -389,5 +467,12 @@ export const useStore = create<AppState>((set, get) => ({
       isAiTyping: false,
       selectedPageUrl: "",
       highlightSelector: null,
+      epics: [],
+      pinnedTags: [],
+      domModifications: [],
+      trainingStatus: "not_started",
+      centerPanelFullscreen: false,
+      rightPanelFullscreen: false,
+      viewMode: "live-tagging",
     }),
 }));

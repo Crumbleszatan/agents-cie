@@ -145,6 +145,22 @@ export async function GET(request: NextRequest) {
         }
       } catch(err) {}
     }
+    if (e.data.type === 'agency-history-back') { window.history.back(); }
+    if (e.data.type === 'agency-history-forward') { window.history.forward(); }
+    if (e.data.type === 'agency-apply-modifications') {
+      try {
+        var mods = e.data.modifications || [];
+        for (var i = 0; i < mods.length; i++) {
+          var mod = mods[i];
+          var target = document.querySelector(mod.selector);
+          if (!target) continue;
+          if (mod.type === 'text' && mod.value) { target.textContent = mod.value; }
+          else if (mod.type === 'style' && mod.property && mod.value) { target.style[mod.property] = mod.value; }
+          else if (mod.type === 'add' && mod.value) { target.insertAdjacentHTML('beforeend', mod.value); }
+          else if (mod.type === 'remove') { target.remove(); }
+        }
+      } catch(err) {}
+    }
   });
 
   document.addEventListener('mouseover', function(e) {

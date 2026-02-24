@@ -27,7 +27,6 @@ import type { AppPhase } from "@/types";
 
 export function TopBar() {
   const project = useStore((s) => s.project);
-  const context = useStore((s) => s.context);
   const currentStory = useStore((s) => s.currentStory);
   const appPhase = useStore((s) => s.appPhase);
   const setAppPhase = useStore((s) => s.setAppPhase);
@@ -123,21 +122,13 @@ export function TopBar() {
   const currentPhaseIndex = phases.findIndex((p) => p.key === appPhase);
 
   const handlePhaseChange = (phase: AppPhase) => {
+    // Disable Prioritize and Ship when no stories exist
+    if (phase !== "build" && stories.length === 0) return;
     if (appPhase === "build" && phase !== "build") {
       saveCurrentStory();
     }
     setAppPhase(phase);
   };
-
-  const buildSubPhases = [
-    { key: "discovery", label: "Discovery" },
-    { key: "specification", label: "Specification" },
-    { key: "refinement", label: "Refinement" },
-    { key: "review", label: "Review" },
-  ];
-  const currentSubPhaseIndex = buildSubPhases.findIndex(
-    (p) => p.key === context.phase
-  );
 
   const displayProjectName = currentProject?.name || project?.name || "Aucun projet";
 
@@ -233,20 +224,24 @@ export function TopBar() {
             const Icon = phase.icon;
             const isActive = i === currentPhaseIndex;
             const isPast = i < currentPhaseIndex;
+            const isDisabled = phase.key !== "build" && stories.length === 0;
 
             return (
               <div key={phase.key} className="flex items-center">
                 <motion.button
                   onClick={() => handlePhaseChange(phase.key)}
+                  disabled={isDisabled}
                   className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
-                    isActive
+                    isDisabled
+                      ? "opacity-40 cursor-not-allowed text-muted-foreground"
+                      : isActive
                       ? "bg-foreground text-white shadow-sm"
                       : isPast
                       ? "bg-white text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={isDisabled ? {} : { scale: 1.02 }}
+                  whileTap={isDisabled ? {} : { scale: 0.98 }}
                 >
                   <Icon className="w-3.5 h-3.5" />
                   {phase.label}
@@ -273,35 +268,6 @@ export function TopBar() {
             );
           })}
         </div>
-
-        {appPhase === "build" && (
-          <div className="flex items-center ml-4 gap-0.5">
-            {buildSubPhases.map((phase, i) => (
-              <div key={phase.key} className="flex items-center">
-                <span
-                  className={`text-[10px] px-2 py-1 rounded-md font-medium ${
-                    i === currentSubPhaseIndex
-                      ? "bg-muted text-foreground"
-                      : i < currentSubPhaseIndex
-                      ? "text-foreground"
-                      : "text-muted-foreground/50"
-                  }`}
-                >
-                  {phase.label}
-                </span>
-                {i < buildSubPhases.length - 1 && (
-                  <div
-                    className={`w-3 h-px ${
-                      i < currentSubPhaseIndex
-                        ? "bg-foreground"
-                        : "bg-border-light"
-                    }`}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Right Actions */}

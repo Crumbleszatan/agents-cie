@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap, Building2, FolderKanban, Users, Settings, Plus,
   ArrowLeft, Globe, GitBranch, LayoutGrid,
-  Trash2, X, ChevronRight, LogOut,
+  Trash2, X, ChevronRight, LogOut, Mail, Loader2, Check,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -197,7 +197,7 @@ export default function DashboardPage() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.15 }}
             >
-              <MembersTab members={members} isAdmin={isAdmin} />
+              <MembersTab members={members} isAdmin={isAdmin} orgId={currentOrg.id} />
             </motion.div>
           )}
 
@@ -492,21 +492,137 @@ function NewProjectForm({
 function MembersTab({
   members,
   isAdmin,
+  orgId,
 }: {
   members: { id: string; user_id: string; role: string; profile: { email: string; full_name: string | null; avatar_url: string | null } }[];
   isAdmin: boolean;
+  orgId: string;
 }) {
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"member" | "viewer">("member");
+  const [inviting, setInviting] = useState(false);
+  const [inviteSuccess, setInviteSuccess] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail) return;
+    setInviting(true);
+    setInviteError(null);
+    setInviteSuccess(false);
+
+    try {
+      const res = await fetch("/api/organizations/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organization_id: orgId,
+          email: inviteEmail,
+          role: inviteRole,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setInviteError(data.error || "Erreur lors de l'invitation");
+      } else {
+        setInviteSuccess(true);
+        setInviteEmail("");
+        setTimeout(() => setInviteSuccess(false), 3000);
+      }
+    } catch {
+      setInviteError("Erreur réseau");
+    }
+    setInviting(false);
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Membres</h2>
-        {isAdmin && (
-          <p className="text-[11px] text-muted-foreground bg-muted px-3 py-1.5 rounded-lg">
-            Les utilisateurs doivent d&apos;abord créer un compte
-          </p>
-        )}
+        <span className="text-[10px] px-2 py-1 bg-muted rounded-md text-muted-foreground">
+          {members.length} membre{members.length > 1 ? "s" : ""}
+        </span>
       </div>
 
+      {/* Invite form (admin only) */}
+      {isAdmin && (
+        <div className="panel shadow-soft p-4 mb-4">
+          <h3 className="text-xs font-semibold mb-3 flex items-center gap-1.5">
+            <Mail className="w-3.5 h-3.5" />
+            Inviter un membre
+          </h3>
+          <form onSubmit={handleInvite} className="flex items-end gap-2">
+            <div className="flex-1">
+              <label className="text-[10px] font-medium text-muted-foreground mb-1 block">
+                Adresse email
+              </label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="collaborateur@email.com"
+                className="input-clean w-full text-xs"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-muted-foreground mb-1 block">
+                Rôle
+              </label>
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as "member" | "viewer")}
+                className="input-clean text-xs px-3 py-2"
+              >
+                <option value="member">Member</option>
+                <option value="viewer">Viewer</option>
+              </select>
+            </div>
+            <button
+              type="submit"
+              disabled={inviting || !inviteEmail}
+              className="btn-primary flex items-center gap-1.5 text-xs disabled:opacity-50 whitespace-nowrap"
+            >
+              {inviting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <>
+                  <Plus className="w-3.5 h-3.5" />
+                  Inviter
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Feedback */}
+          <AnimatePresence>
+            {inviteSuccess && (
+              <motion.p
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="text-xs text-green-600 flex items-center gap-1 mt-2"
+              >
+                <Check className="w-3 h-3" />
+                Invitation envoyée avec succès
+              </motion.p>
+            )}
+            {inviteError && (
+              <motion.p
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="text-xs text-red-500 mt-2"
+              >
+                {inviteError}
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Members list */}
       {members.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />

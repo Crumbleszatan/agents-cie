@@ -10,10 +10,6 @@ import {
   ArrowUp,
   Paperclip,
   CornerDownLeft,
-  Lightbulb,
-  Target,
-  Layers,
-  MousePointer,
   Check,
   Circle,
   Square,
@@ -34,6 +30,9 @@ export function ChatPanel() {
   const addSubtask = useStore((s) => s.addSubtask);
   const addAcceptanceCriterion = useStore((s) => s.addAcceptanceCriterion);
   const project = useStore((s) => s.project);
+  const setSelectedPageUrl = useStore((s) => s.setSelectedPageUrl);
+  const setHighlightSelector = useStore((s) => s.setHighlightSelector);
+  const setDomModifications = useStore((s) => s.setDomModifications);
 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -43,6 +42,7 @@ export function ChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isAiTyping]);
 
+  // Welcome message
   useEffect(() => {
     if (messages.length === 0 && project) {
       const welcomeMessage: ChatMessage = {
@@ -55,6 +55,20 @@ export function ChatPanel() {
       addMessage(welcomeMessage);
     }
   }, [project, messages.length, addMessage]);
+
+  // Listen for injected chat context from Live Tagging
+  useEffect(() => {
+    const handleInjectChat = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.text) {
+        setInput((prev) => (prev ? prev + "\n" + detail.text : detail.text));
+        textareaRef.current?.focus();
+      }
+    };
+
+    window.addEventListener("agency-inject-chat", handleInjectChat);
+    return () => window.removeEventListener("agency-inject-chat", handleInjectChat);
+  }, []);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -109,6 +123,7 @@ export function ChatPanel() {
           addMessage(aiMessage);
         }
 
+        // Apply story updates
         if (data.storyUpdates) updateStory(data.storyUpdates);
         if (data.subtasks) {
           for (const subtask of data.subtasks) {
@@ -121,6 +136,19 @@ export function ChatPanel() {
           }
         }
         if (data.contextUpdates) updateContext(data.contextUpdates);
+
+        // Auto-navigate preview based on AI response
+        if (data.metadata?.navigateTo) {
+          setSelectedPageUrl(data.metadata.navigateTo);
+        }
+        if (data.metadata?.highlightSelector) {
+          setHighlightSelector(data.metadata.highlightSelector);
+        }
+
+        // Apply DOM modifications for IA Preview
+        if (data.domModifications && data.domModifications.length > 0) {
+          setDomModifications(data.domModifications);
+        }
       } catch {
         addMessage({
           id: uuid(),
@@ -133,7 +161,7 @@ export function ChatPanel() {
         setAiTyping(false);
       }
     },
-    [isAiTyping, messages, context, project, addMessage, setAiTyping, updateStory, addSubtask, addAcceptanceCriterion, updateContext]
+    [isAiTyping, messages, context, project, addMessage, setAiTyping, updateStory, addSubtask, addAcceptanceCriterion, updateContext, setSelectedPageUrl, setHighlightSelector, setDomModifications]
   );
 
   const handleSend = () => sendMessage(input);
@@ -157,13 +185,6 @@ export function ChatPanel() {
     sendMessage(answer);
   };
 
-  const quickActions = [
-    { icon: Target, label: "Nouvelle feature", prompt: "Je souhaite ajouter une nouvelle fonctionnalité : " },
-    { icon: Layers, label: "Amélioration", prompt: "Je voudrais améliorer " },
-    { icon: MousePointer, label: "Pointer sur le site", prompt: "", action: "point" },
-    { icon: Lightbulb, label: "Suggestion IA", prompt: "Que me suggères-tu d'améliorer sur le site ?" },
-  ];
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -174,9 +195,6 @@ export function ChatPanel() {
           </div>
           <div>
             <h2 className="text-sm font-semibold">Assistant IA</h2>
-            <p className="text-[11px] text-muted-foreground">
-              Phase : {context.phase} · {context.questionsAsked} questions
-            </p>
           </div>
         </div>
       </div>
@@ -204,7 +222,7 @@ export function ChatPanel() {
                   <MessageContent content={msg.content} />
                 </div>
 
-                {/* Options — OUTSIDE the bubble, clean card UI */}
+                {/* Options */}
                 {msg.role === "assistant" &&
                   msg.metadata?.options &&
                   msg.metadata.options.length > 0 && (
@@ -248,29 +266,6 @@ export function ChatPanel() {
 
         <div ref={messagesEndRef} />
       </div>
-
-      {/* Quick Actions */}
-      {messages.length <= 1 && (
-        <div className="px-4 pb-2">
-          <div className="grid grid-cols-2 gap-1.5">
-            {quickActions.map((action) => (
-              <button
-                key={action.label}
-                onClick={() => {
-                  if (action.prompt) {
-                    setInput(action.prompt);
-                    textareaRef.current?.focus();
-                  }
-                }}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-all text-left"
-              >
-                <action.icon className="w-3.5 h-3.5 flex-shrink-0" />
-                {action.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Input Area */}
       <div className="p-3 border-t border-border-light">
@@ -348,7 +343,6 @@ function OptionsSelector({
     if (showOther) otherRef.current?.focus();
   }, [showOther]);
 
-  /* ── Already answered: show pill badges ── */
   if (answered) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2.5 flex flex-wrap gap-1.5">
@@ -397,7 +391,6 @@ function OptionsSelector({
       transition={{ duration: 0.25, delay: 0.08 }}
       className="mt-3 space-y-1.5"
     >
-      {/* Selection mode indicator */}
       <div className="flex items-center gap-1.5 px-1 mb-1">
         {isRadio ? (
           <Circle className="w-3 h-3 text-muted-foreground" />
@@ -409,7 +402,6 @@ function OptionsSelector({
         </span>
       </div>
 
-      {/* Option cards */}
       {options.map((option, i) => {
         const active = selected.has(option);
         return (
@@ -425,7 +417,6 @@ function OptionsSelector({
                 : "bg-white text-foreground border-border-light hover:border-foreground/20 hover:shadow-sm"
               }`}
           >
-            {/* Indicator */}
             <span className="flex-shrink-0">
               {isRadio ? (
                 active ? (
@@ -441,9 +432,7 @@ function OptionsSelector({
                 <Square className="w-[18px] h-[18px] text-border" />
               )}
             </span>
-
             <span className="flex-1">{option}</span>
-
             {active && (
               <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 500 }}>
                 <Check className="w-4 h-4 text-white" />
@@ -453,7 +442,6 @@ function OptionsSelector({
         );
       })}
 
-      {/* "Autre" button */}
       <motion.button
         initial={{ opacity: 0, x: -6 }}
         animate={{ opacity: 1, x: 0 }}
@@ -472,7 +460,6 @@ function OptionsSelector({
         <span className="flex-1">Autre...</span>
       </motion.button>
 
-      {/* "Autre" text input */}
       <AnimatePresence>
         {showOther && (
           <motion.div
@@ -510,7 +497,6 @@ function OptionsSelector({
         )}
       </AnimatePresence>
 
-      {/* Validate button */}
       {hasSelection && !showOther && (
         <motion.button
           initial={{ opacity: 0, y: 4 }}

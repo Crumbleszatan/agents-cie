@@ -23,7 +23,7 @@ import {
   ExternalLink,
   Star,
 } from "lucide-react";
-import type { Subtask, AcceptanceCriterion } from "@/types";
+import type { Subtask, AcceptanceCriterion, Epic } from "@/types";
 
 const subtaskTypeConfig = {
   frontend: { icon: Code, color: "text-blue-600", bg: "bg-blue-50", label: "Front" },
@@ -32,6 +32,8 @@ const subtaskTypeConfig = {
   qa: { icon: TestTube, color: "text-orange-600", bg: "bg-orange-50", label: "QA" },
   devops: { icon: Cloud, color: "text-cyan-600", bg: "bg-cyan-50", label: "DevOps" },
 };
+
+const EPIC_COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316", "#ec4899"];
 
 export function USPanel() {
   const currentStory = useStore((s) => s.currentStory);
@@ -46,13 +48,19 @@ export function USPanel() {
   const saveCurrentStory = useStore((s) => s.saveCurrentStory);
   const startNewStory = useStore((s) => s.startNewStory);
   const storiesCount = useStore((s) => s.stories.length);
+  const epics = useStore((s) => s.epics);
+  const addEpic = useStore((s) => s.addEpic);
+  const removeEpic = useStore((s) => s.removeEpic);
 
   const [expandedSections, setExpandedSections] = useState({
     story: true,
     acceptance: true,
     subtasks: true,
     dod: false,
+    epics: false,
   });
+  const [newEpicTitle, setNewEpicTitle] = useState("");
+  const [showNewEpic, setShowNewEpic] = useState(false);
 
   const [editingField, setEditingField] = useState<string | null>(null);
 
@@ -144,6 +152,20 @@ export function USPanel() {
               <option value="high">High</option>
               <option value="critical">Critical</option>
             </select>
+            {epics.length > 0 && (
+              <select
+                value={currentStory.epicId || ""}
+                onChange={(e) => updateStory({ epicId: e.target.value || undefined })}
+                className="text-[11px] font-medium px-2 py-1 rounded-md border-0 outline-none cursor-pointer bg-violet-50 text-violet-600"
+              >
+                <option value="">Aucun Epic</option>
+                {epics.map((epic) => (
+                  <option key={epic.id} value={epic.id}>
+                    {epic.title}
+                  </option>
+                ))}
+              </select>
+            )}
             {currentStory.storyPoints !== null && (
               <div className="flex items-center gap-1 tag">
                 <Star className="w-3 h-3" />
@@ -321,6 +343,119 @@ export function USPanel() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Epics */}
+        <SectionHeader
+          title="Epics"
+          count={epics.length}
+          expanded={expandedSections.epics}
+          onToggle={() => toggleSection("epics")}
+          onAdd={() => setShowNewEpic(true)}
+        />
+        <AnimatePresence>
+          {expandedSections.epics && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="space-y-1.5">
+                {epics.map((epic) => {
+                  const storyCount = useStore.getState().stories.filter((s) => s.epicId === epic.id).length;
+                  return (
+                    <div
+                      key={epic.id}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-border-light group hover:shadow-sm transition-all"
+                    >
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: epic.color }}
+                      />
+                      <span className="flex-1 text-xs font-medium truncate">{epic.title}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {storyCount} US
+                      </span>
+                      <button
+                        onClick={() => removeEpic(epic.id)}
+                        className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {/* New epic inline form */}
+                <AnimatePresence>
+                  {showNewEpic && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="flex items-center gap-2 p-2 rounded-xl border border-border-light bg-white">
+                        <input
+                          value={newEpicTitle}
+                          onChange={(e) => setNewEpicTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && newEpicTitle.trim()) {
+                              addEpic({
+                                id: uuid(),
+                                title: newEpicTitle.trim(),
+                                description: "",
+                                color: EPIC_COLORS[epics.length % EPIC_COLORS.length],
+                                storyIds: [],
+                                createdAt: new Date().toISOString(),
+                              });
+                              setNewEpicTitle("");
+                              setShowNewEpic(false);
+                            }
+                            if (e.key === "Escape") {
+                              setNewEpicTitle("");
+                              setShowNewEpic(false);
+                            }
+                          }}
+                          placeholder="Nom de l'epic..."
+                          className="flex-1 text-xs bg-transparent outline-none"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => {
+                            if (newEpicTitle.trim()) {
+                              addEpic({
+                                id: uuid(),
+                                title: newEpicTitle.trim(),
+                                description: "",
+                                color: EPIC_COLORS[epics.length % EPIC_COLORS.length],
+                                storyIds: [],
+                                createdAt: new Date().toISOString(),
+                              });
+                              setNewEpicTitle("");
+                              setShowNewEpic(false);
+                            }
+                          }}
+                          disabled={!newEpicTitle.trim()}
+                          className="p-1 rounded-md bg-foreground text-white disabled:opacity-30"
+                        >
+                          <Check className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {epics.length === 0 && !showNewEpic && (
+                  <p className="text-xs text-muted-foreground/50 text-center py-3">
+                    Créez des epics pour regrouper vos US
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Footer */}
@@ -338,10 +473,6 @@ export function USPanel() {
           {storiesCount > 0 && (
             <span className="tag text-[9px] ml-1">{storiesCount} sauvée{storiesCount > 1 ? "s" : ""}</span>
           )}
-        </button>
-        <button className="btn-primary w-full flex items-center justify-center gap-2 text-xs">
-          <ExternalLink className="w-3.5 h-3.5" />
-          Exporter vers Jira
         </button>
       </div>
     </div>
