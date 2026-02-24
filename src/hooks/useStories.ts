@@ -34,6 +34,7 @@ function dbToStory(row: any): UserStory {
     jiraKey: row.jira_key,
     gitBranch: row.git_branch,
     completionPercent: row.completion_percent || 0,
+    epicId: row.epic_id || undefined,
   };
 }
 
@@ -64,6 +65,7 @@ function storyToDb(story: Partial<UserStory>, projectId?: string, userId?: strin
   if (story.jiraKey !== undefined) result.jira_key = story.jiraKey;
   if (story.gitBranch !== undefined) result.git_branch = story.gitBranch;
   if (story.completionPercent !== undefined) result.completion_percent = story.completionPercent;
+  if (story.epicId !== undefined) result.epic_id = story.epicId;
   return result;
 }
 

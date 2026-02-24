@@ -141,6 +141,19 @@ interface AppState {
   currentProjectId: string | null;
   setCurrentProjectId: (id: string | null) => void;
 
+  // Persistence callbacks (set by StorySyncProvider)
+  _persistCreate: ((story: UserStory) => Promise<UserStory | null>) | null;
+  _persistUpdate: ((id: string, updates: Partial<UserStory>) => Promise<UserStory | null>) | null;
+  _persistDelete: ((id: string) => Promise<void>) | null;
+  setPersistCallbacks: (cbs: {
+    create: (story: UserStory) => Promise<UserStory | null>;
+    update: (id: string, updates: Partial<UserStory>) => Promise<UserStory | null>;
+    delete: (id: string) => Promise<void>;
+  } | null) => void;
+
+  // Bulk set stories from DB
+  setStoriesFromDb: (stories: UserStory[]) => void;
+
   // Reset workspace when switching project
   resetForProjectSwitch: () => void;
 }
@@ -265,10 +278,15 @@ export const useStore = create<AppState>((set, get) => ({
         s.id === id ? { ...s, ...updates } : s
       ),
     })),
-  removeStory: (id) =>
+  removeStory: (id) => {
     set((state) => ({
       stories: state.stories.filter((s) => s.id !== id),
-    })),
+    }));
+    const state = get();
+    if (state._persistDelete) {
+      state._persistDelete(id).catch(console.error);
+    }
+  },
   saveCurrentStory: () => {
     const state = get();
     const story = state.currentStory;
@@ -284,13 +302,36 @@ export const useStore = create<AppState>((set, get) => ({
 
     const existing = state.stories.find((s) => s.id === story.id);
     if (existing) {
+      // Update in Zustand
       set({
         stories: state.stories.map((s) =>
           s.id === story.id ? storyWithEffort : s
         ),
       });
+      // Persist to DB
+      if (state._persistUpdate) {
+        state._persistUpdate(story.id, storyWithEffort).catch(console.error);
+      }
     } else {
+      // Add to Zustand
       set({ stories: [...state.stories, storyWithEffort] });
+      // Persist to DB — use DB-generated ID if returned
+      if (state._persistCreate) {
+        state._persistCreate(storyWithEffort).then((dbStory) => {
+          if (dbStory && dbStory.id !== storyWithEffort.id) {
+            // Replace client-generated ID with DB ID
+            set((s) => ({
+              stories: s.stories.map((st) =>
+                st.id === storyWithEffort.id ? { ...st, id: dbStory.id } : st
+              ),
+              currentStory:
+                s.currentStory.id === storyWithEffort.id
+                  ? { ...s.currentStory, id: dbStory.id }
+                  : s.currentStory,
+            }));
+          }
+        }).catch(console.error);
+      }
     }
   },
   startNewStory: () => {
@@ -382,18 +423,28 @@ export const useStore = create<AppState>((set, get) => ({
     })),
 
   // Matrix
-  updateStoryMatrixPosition: (id, x, y) =>
+  updateStoryMatrixPosition: (id, x, y) => {
     set((state) => ({
       stories: state.stories.map((s) =>
         s.id === id ? { ...s, matrixPosition: { x, y } } : s
       ),
-    })),
-  setStoryProductionMode: (id, mode) =>
+    }));
+    const state = get();
+    if (state._persistUpdate) {
+      state._persistUpdate(id, { matrixPosition: { x, y } }).catch(console.error);
+    }
+  },
+  setStoryProductionMode: (id, mode) => {
     set((state) => ({
       stories: state.stories.map((s) =>
         s.id === id ? { ...s, productionMode: mode } : s
       ),
-    })),
+    }));
+    const state = get();
+    if (state._persistUpdate) {
+      state._persistUpdate(id, { productionMode: mode }).catch(console.error);
+    }
+  },
 
   // Chat
   messages: [],
@@ -490,6 +541,21 @@ export const useStore = create<AppState>((set, get) => ({
   setCurrentOrgId: (id) => set({ currentOrgId: id }),
   currentProjectId: null,
   setCurrentProjectId: (id) => set({ currentProjectId: id }),
+
+  // Persistence callbacks (set by StorySyncProvider)
+  _persistCreate: null,
+  _persistUpdate: null,
+  _persistDelete: null,
+  setPersistCallbacks: (cbs) => {
+    if (cbs) {
+      set({ _persistCreate: cbs.create, _persistUpdate: cbs.update, _persistDelete: cbs.delete });
+    } else {
+      set({ _persistCreate: null, _persistUpdate: null, _persistDelete: null });
+    }
+  },
+
+  // Bulk set stories from DB (used by StorySyncProvider on project load)
+  setStoriesFromDb: (stories) => set({ stories }),
 
   // Reset workspace for project switch — clear all transient state
   resetForProjectSwitch: () =>
