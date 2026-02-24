@@ -16,6 +16,7 @@ import {
   CheckSquare,
   PenLine,
   History,
+  RotateCcw,
 } from "lucide-react";
 import type { ChatMessage } from "@/types";
 import { ChatHistory } from "./ChatHistory";
@@ -38,6 +39,7 @@ export function ChatPanel() {
   const currentStoryTitle = useStore((s) => s.currentStory.title);
   const currentStoryId = useStore((s) => s.currentStory.id);
   const stories = useStore((s) => s.stories);
+  const startNewStory = useStore((s) => s.startNewStory);
 
   const [input, setInput] = useState("");
   const [showHistory, setShowHistory] = useState(false);
@@ -210,19 +212,32 @@ export function ChatPanel() {
               )}
             </div>
           </div>
-          {stories.length > 0 && (
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className={`p-1.5 rounded-lg transition-colors ${
-                showHistory
-                  ? "bg-foreground text-white"
-                  : "hover:bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-              title="Historique des conversations"
-            >
-              <History className="w-4 h-4" />
-            </button>
-          )}
+          <div className="flex items-center gap-1">
+            {/* Reset chat — visible when there are messages on an unsaved story */}
+            {messages.length > 0 && !stories.find((s) => s.id === currentStoryId) && (
+              <button
+                onClick={startNewStory}
+                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Nouvelle conversation"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {/* History toggle */}
+            {stories.length > 0 && (
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  showHistory
+                    ? "bg-foreground text-white"
+                    : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+                title="Historique des conversations"
+              >
+                <History className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

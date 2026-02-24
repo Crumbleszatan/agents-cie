@@ -15,9 +15,11 @@ interface StoryConversation {
 
 export function ChatHistory({ onClose }: { onClose: () => void }) {
   const currentProjectId = useStore((s) => s.currentProjectId);
-  const currentStoryId = useStore((s) => s.currentStory.id);
+  const currentStory = useStore((s) => s.currentStory);
+  const currentStoryId = currentStory.id;
   const stories = useStore((s) => s.stories);
   const editStory = useStore((s) => s.editStory);
+  const storeMessages = useStore((s) => s.messages);
 
   const { allMessages, searchMessages } = useMessages(currentProjectId);
 
@@ -25,11 +27,29 @@ export function ChatHistory({ onClose }: { onClose: () => void }) {
   const [searchResults, setSearchResults] = useState<ChatMessage[] | null>(null);
   const [searching, setSearching] = useState(false);
 
+  // Build a lookup map that includes saved stories + current unsaved story
+  const storyMap = useMemo(() => {
+    const map = new Map<string, UserStory>();
+    for (const s of stories) map.set(s.id, s);
+    // Also include the current story if it has messages (even if unsaved / no title yet)
+    if (!map.has(currentStoryId) && storeMessages.length > 0) {
+      map.set(currentStoryId, currentStory);
+    }
+    return map;
+  }, [stories, currentStoryId, currentStory, storeMessages.length]);
+
+  // Merge DB messages with current in-memory messages (for unsaved story)
+  const mergedMessages = useMemo(() => {
+    const dbIds = new Set(allMessages.map((m) => m.id));
+    const extra = storeMessages.filter((m) => !dbIds.has(m.id));
+    return [...allMessages, ...extra];
+  }, [allMessages, storeMessages]);
+
   // Group all messages by storyId → map to story
   const conversations = useMemo<StoryConversation[]>(() => {
     const grouped = new Map<string, ChatMessage[]>();
 
-    const source = searchResults ?? allMessages;
+    const source = searchResults ?? mergedMessages;
 
     for (const msg of source) {
       if (!msg.storyId) continue;
@@ -40,7 +60,7 @@ export function ChatHistory({ onClose }: { onClose: () => void }) {
 
     const result: StoryConversation[] = [];
     for (const [storyId, msgs] of grouped) {
-      const story = stories.find((s) => s.id === storyId);
+      const story = storyMap.get(storyId);
       if (!story || msgs.length === 0) continue;
       const sorted = msgs.sort(
         (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
@@ -57,7 +77,7 @@ export function ChatHistory({ onClose }: { onClose: () => void }) {
       (a, b) =>
         b.lastMessage.timestamp.getTime() - a.lastMessage.timestamp.getTime()
     );
-  }, [allMessages, searchResults, stories]);
+  }, [mergedMessages, searchResults, storyMap]);
 
   const handleSearch = useCallback(
     async (e: React.FormEvent) => {
@@ -175,7 +195,9 @@ export function ChatHistory({ onClose }: { onClose: () => void }) {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-medium truncate">
-                        {conv.story.title || "Sans titre"}
+                        {conv.story.title || (
+                          <span className="italic text-muted-foreground">Conversation en cours…</span>
+                        )}
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
                         {preview}

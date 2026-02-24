@@ -13,7 +13,7 @@ import { ChatSyncProvider } from "@/components/providers/ChatSyncProvider";
 import { TopBar } from "@/components/layout/TopBar";
 import { useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from "lucide-react";
 
 export function MainLayout() {
   const appPhase = useStore((s) => s.appPhase);
@@ -104,7 +104,7 @@ export function MainLayout() {
 
         {/* Center Panel */}
         {showCenterPanel && (
-          <div className="flex-1 panel shadow-soft overflow-hidden flex flex-col min-w-0 relative">
+          <div className="flex-1 panel shadow-soft overflow-hidden flex flex-col min-w-0 relative group/center">
             <AnimatePresence mode="wait">
               <motion.div
                 key={appPhase}
@@ -118,27 +118,30 @@ export function MainLayout() {
               </motion.div>
             </AnimatePresence>
 
-            {/* Collapse right panel button (expand center to fullscreen) */}
+            {/* Collapse right panel — discreet, vertically centered */}
             {showRightPanel && (
               <button
                 onClick={() => setCenterPanelFullscreen(true)}
-                className="absolute top-2 right-2 z-10 w-6 h-6 bg-white/80 backdrop-blur-sm rounded-md border border-border-light flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white transition-all shadow-sm"
-                title="Maximiser le preview"
+                className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-5 h-10 rounded-l-md bg-foreground/[0.04] opacity-0 group-hover/center:opacity-100 hover:!bg-foreground/10 transition-all flex items-center justify-center text-muted-foreground/50 hover:!text-foreground"
+                title="Masquer le panneau droit"
               >
-                <ChevronRight className="w-3.5 h-3.5" />
+                <PanelRightClose className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
         )}
 
-        {/* Restore center panel button (when right panel is fullscreen) */}
+        {/* Closed center panel — vertical tab to reopen */}
         {!showCenterPanel && (
           <button
             onClick={() => setRightPanelFullscreen(false)}
-            className="w-6 flex-shrink-0 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-all"
+            className="w-7 flex-shrink-0 flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border-light hover:border-foreground/20 hover:bg-muted/50 transition-all group/restore cursor-pointer"
             title="Restaurer le preview"
           >
-            <ChevronLeft className="w-3.5 h-3.5" />
+            <PanelLeftOpen className="w-3.5 h-3.5 text-muted-foreground/40 group-hover/restore:text-foreground transition-colors" />
+            <span className="text-[9px] text-muted-foreground/40 group-hover/restore:text-muted-foreground font-medium [writing-mode:vertical-lr] tracking-wider transition-colors">
+              PREVIEW
+            </span>
           </button>
         )}
 
@@ -150,21 +153,24 @@ export function MainLayout() {
           />
         )}
 
-        {/* Restore right panel button (when center is fullscreen) */}
+        {/* Closed right panel — vertical tab to reopen */}
         {!showRightPanel && (
           <button
             onClick={() => setCenterPanelFullscreen(false)}
-            className="w-6 flex-shrink-0 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-all"
+            className="w-7 flex-shrink-0 flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border-light hover:border-foreground/20 hover:bg-muted/50 transition-all group/restore cursor-pointer"
             title="Restaurer le panneau US"
           >
-            <ChevronLeft className="w-3.5 h-3.5" />
+            <PanelRightOpen className="w-3.5 h-3.5 text-muted-foreground/40 group-hover/restore:text-foreground transition-colors" />
+            <span className="text-[9px] text-muted-foreground/40 group-hover/restore:text-muted-foreground font-medium [writing-mode:vertical-lr] tracking-wider transition-colors">
+              {appPhase === "build" ? "US" : "DÉTAIL"}
+            </span>
           </button>
         )}
 
         {/* Right: US Panel */}
         {showRightPanel && (
           <div
-            className={`panel shadow-soft overflow-hidden flex flex-col ${
+            className={`panel shadow-soft overflow-hidden flex flex-col relative group/right ${
               rightPanelFullscreen ? "flex-1" : ""
             }`}
             style={
@@ -173,15 +179,14 @@ export function MainLayout() {
                 : { width: rightPanelWidth, minWidth: rightPanelWidth }
             }
           >
-            {/* Expand right panel button */}
+            {/* Expand right panel — discreet, vertically centered */}
             {showCenterPanel && (
               <button
                 onClick={() => setRightPanelFullscreen(true)}
-                className="absolute top-2 left-2 z-10 w-6 h-6 bg-white/80 backdrop-blur-sm rounded-md border border-border-light flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white transition-all shadow-sm"
+                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-5 h-10 rounded-r-md bg-foreground/[0.04] opacity-0 group-hover/right:opacity-100 hover:!bg-foreground/10 transition-all flex items-center justify-center text-muted-foreground/50 hover:!text-foreground"
                 title="Maximiser le panneau US"
-                style={{ position: "relative", top: 0, left: 0, marginBottom: -24 }}
               >
-                <ChevronLeft className="w-3.5 h-3.5" />
+                <PanelLeftClose className="w-3.5 h-3.5" />
               </button>
             )}
             {appPhase === "build" ? <USPanel /> : <StoryDetailPanel />}
