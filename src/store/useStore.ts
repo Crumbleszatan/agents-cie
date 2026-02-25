@@ -318,15 +318,17 @@ export const useStore = create<AppState>((set, get) => ({
 
     const existing = state.stories.find((s) => s.id === story.id);
     if (existing) {
+      // Merge: preserve fields updated outside currentStory (e.g. matrixPosition from drag)
+      const merged = { ...existing, ...storyWithEffort };
       // Update in Zustand
       set({
         stories: state.stories.map((s) =>
-          s.id === story.id ? storyWithEffort : s
+          s.id === story.id ? merged : s
         ),
       });
       // Persist to DB
       if (state._persistUpdate) {
-        state._persistUpdate(story.id, storyWithEffort).catch(console.error);
+        state._persistUpdate(story.id, merged).catch(console.error);
       }
     } else {
       // Add to Zustand
