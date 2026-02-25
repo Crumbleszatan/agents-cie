@@ -18,6 +18,7 @@ import {
   Cloud,
   Edit3,
   Star,
+  X,
 } from "lucide-react";
 import type { Subtask, AcceptanceCriterion } from "@/types";
 
@@ -46,8 +47,11 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
   const removeAcceptanceCriterion = useStore((s) => s.removeAcceptanceCriterion);
   const updateAcceptanceCriterion = useStore((s) => s.updateAcceptanceCriterion);
   const epics = useStore((s) => s.epics);
+  const stories = useStore((s) => s.stories);
   const addEpic = useStore((s) => s.addEpic);
   const removeEpic = useStore((s) => s.removeEpic);
+
+  const currentEpic = currentStory.epicId ? epics.find((e) => e.id === currentStory.epicId) : null;
 
   const [expandedSections, setExpandedSections] = useState({
     story: true,
@@ -117,6 +121,7 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
             <option value="high">High</option>
             <option value="critical">Critical</option>
           </select>
+          {/* Epic assignment: chip when assigned, dropdown when not */}
           {showInlineNewEpic ? (
             <div className="flex items-center gap-1">
               <input
@@ -124,7 +129,7 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
                 onChange={(e) => setInlineEpicTitle(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && inlineEpicTitle.trim()) {
-                    const newEpic = {
+                    const epic = {
                       id: uuid(),
                       title: inlineEpicTitle.trim(),
                       description: "",
@@ -132,8 +137,8 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
                       storyIds: [],
                       createdAt: new Date().toISOString(),
                     };
-                    addEpic(newEpic);
-                    updateStory({ epicId: newEpic.id });
+                    addEpic(epic);
+                    updateStory({ epicId: epic.id });
                     setInlineEpicTitle("");
                     setShowInlineNewEpic(false);
                   }
@@ -149,7 +154,7 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
               <button
                 onClick={() => {
                   if (inlineEpicTitle.trim()) {
-                    const newEpic = {
+                    const epic = {
                       id: uuid(),
                       title: inlineEpicTitle.trim(),
                       description: "",
@@ -157,8 +162,8 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
                       storyIds: [],
                       createdAt: new Date().toISOString(),
                     };
-                    addEpic(newEpic);
-                    updateStory({ epicId: newEpic.id });
+                    addEpic(epic);
+                    updateStory({ epicId: epic.id });
                     setInlineEpicTitle("");
                     setShowInlineNewEpic(false);
                   }
@@ -169,27 +174,43 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
                 <Check className="w-3 h-3" />
               </button>
             </div>
+          ) : currentEpic ? (
+            <div
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium cursor-default"
+              style={{ backgroundColor: currentEpic.color + "18", color: currentEpic.color }}
+            >
+              <div
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: currentEpic.color }}
+              />
+              <span className="truncate max-w-[100px]">{currentEpic.title}</span>
+              <button
+                onClick={() => updateStory({ epicId: undefined })}
+                className="p-0.5 rounded hover:bg-black/10 transition-colors -mr-0.5"
+                title="Retirer de l'epic"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </div>
           ) : (
             <select
-              value={currentStory.epicId || ""}
+              value=""
               onChange={(e) => {
                 if (e.target.value === "__new__") {
                   setShowInlineNewEpic(true);
-                } else {
-                  updateStory({ epicId: e.target.value || undefined });
+                } else if (e.target.value) {
+                  updateStory({ epicId: e.target.value });
                 }
               }}
-              className={`text-[11px] font-medium px-2 py-1 rounded-md border-0 outline-none cursor-pointer ${
-                currentStory.epicId ? "bg-violet-50 text-violet-600" : "bg-muted text-muted-foreground"
-              }`}
+              className="text-[11px] font-medium px-2 py-1 rounded-md border-0 outline-none cursor-pointer bg-muted text-muted-foreground"
             >
-              <option value="">Aucun Epic</option>
+              <option value="">Associer un Epic</option>
               {epics.map((epic) => (
                 <option key={epic.id} value={epic.id}>
                   {epic.title}
                 </option>
               ))}
-              <option value="__new__">+ Créer un epic</option>
+              <option value="__new__">+ Cr&eacute;er un epic</option>
             </select>
           )}
           {currentStory.storyPoints !== null && (
@@ -370,11 +391,11 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
         )}
       </AnimatePresence>
 
-      {/* Epics */}
-      {showEpicsSection && (
+      {/* Epics overview — shows all project epics with US counts */}
+      {showEpicsSection && epics.length > 0 && (
         <>
           <SectionHeader
-            title="Epics"
+            title="Epics du projet"
             count={epics.length}
             expanded={expandedSections.epics}
             onToggle={() => toggleSection("epics")}
@@ -391,27 +412,36 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
               >
                 <div className="space-y-1.5">
                   {epics.map((epic) => {
-                    const storyCount = useStore.getState().stories.filter((s) => s.epicId === epic.id).length;
+                    const storyCount = stories.filter((s) => s.epicId === epic.id).length;
+                    const isActive = currentStory.epicId === epic.id;
                     return (
-                      <div
+                      <button
                         key={epic.id}
-                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-border-light group hover:shadow-sm transition-all"
+                        onClick={() => updateStory({ epicId: isActive ? undefined : epic.id })}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl border transition-all group text-left ${
+                          isActive
+                            ? "border-foreground/20 bg-foreground/5 shadow-sm"
+                            : "border-border-light bg-white hover:shadow-sm"
+                        }`}
                       >
                         <div
                           className="w-3 h-3 rounded-full flex-shrink-0"
                           style={{ backgroundColor: epic.color }}
                         />
                         <span className="flex-1 text-xs font-medium truncate">{epic.title}</span>
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-[10px] text-muted-foreground tabular-nums">
                           {storyCount} US
                         </span>
-                        <button
-                          onClick={() => removeEpic(epic.id)}
+                        {isActive && (
+                          <Check className="w-3 h-3 text-foreground flex-shrink-0" />
+                        )}
+                        <div
+                          onClick={(e) => { e.stopPropagation(); removeEpic(epic.id); }}
                           className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
                         >
                           <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
+                        </div>
+                      </button>
                     );
                   })}
 
@@ -474,12 +504,6 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
                       </motion.div>
                     )}
                   </AnimatePresence>
-
-                  {epics.length === 0 && !showNewEpic && (
-                    <p className="text-xs text-muted-foreground/50 text-center py-3">
-                      Créez des epics pour regrouper vos US
-                    </p>
-                  )}
                 </div>
               </motion.div>
             )}

@@ -1,10 +1,13 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { useStore } from "@/store/useStore";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   FileText,
   Plus,
   Save,
+  Check,
   Copy,
   ExternalLink,
 } from "lucide-react";
@@ -15,6 +18,14 @@ export function USPanel() {
   const saveCurrentStory = useStore((s) => s.saveCurrentStory);
   const startNewStory = useStore((s) => s.startNewStory);
   const storiesCount = useStore((s) => s.stories.length);
+
+  const [saveState, setSaveState] = useState<"idle" | "saved">("idle");
+
+  const handleSave = useCallback(() => {
+    saveCurrentStory();
+    setSaveState("saved");
+    setTimeout(() => setSaveState("idle"), 1800);
+  }, [saveCurrentStory]);
 
   return (
     <div className="flex flex-col h-full">
@@ -61,12 +72,39 @@ export function USPanel() {
       {/* Footer */}
       <div className="px-4 py-3 border-t border-border-light space-y-2">
         <button
-          onClick={() => saveCurrentStory()}
-          disabled={!currentStory.title}
-          className="w-full flex items-center justify-center gap-2 text-xs font-semibold py-2.5 rounded-xl bg-foreground text-white hover:opacity-90 transition-all disabled:opacity-40"
+          onClick={handleSave}
+          disabled={!currentStory.title || saveState === "saved"}
+          className={`w-full flex items-center justify-center gap-2 text-xs font-semibold py-2.5 rounded-xl transition-all disabled:opacity-40 ${
+            saveState === "saved"
+              ? "bg-emerald-600 text-white"
+              : "bg-foreground text-white hover:opacity-90"
+          }`}
         >
-          <Save className="w-3.5 h-3.5" />
-          Sauvegarder
+          <AnimatePresence mode="wait">
+            {saveState === "saved" ? (
+              <motion.span
+                key="saved"
+                initial={{ opacity: 0, scale: 0.5 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.5 }}
+                className="flex items-center gap-2"
+              >
+                <Check className="w-3.5 h-3.5" />
+                Sauvegard&eacute;
+              </motion.span>
+            ) : (
+              <motion.span
+                key="save"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center gap-2"
+              >
+                <Save className="w-3.5 h-3.5" />
+                Sauvegarder
+              </motion.span>
+            )}
+          </AnimatePresence>
         </button>
         <button
           onClick={() => {
