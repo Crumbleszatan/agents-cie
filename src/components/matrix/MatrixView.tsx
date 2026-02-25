@@ -5,12 +5,9 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap,
-  Bot,
-  Wrench,
   RotateCcw,
   TrendingUp,
   TrendingDown,
-  Minus,
   Target,
   Gauge,
 } from "lucide-react";
@@ -344,10 +341,8 @@ export function MatrixView() {
               const top = ((100 - pos.y) / 100) * matrixSize - DOT_SIZE / 2;
               const isFullAi = story.productionMode === "full-ai";
               const epicColor = getEpicColor(story.epicId);
-
-              // Epic color styling or fallback to production mode colors
-              const dotBg = epicColor ? `${epicColor}18` : isFullAi ? undefined : undefined;
-              const dotBorder = epicColor || (isFullAi ? undefined : undefined);
+              const isHighPriority = story.priority === "high" || story.priority === "critical";
+              const accentColor = epicColor || (isFullAi ? "#7c3aed" : "#d97706");
 
               return (
                 <motion.div
@@ -367,40 +362,54 @@ export function MatrixView() {
                         ? "0 8px 24px rgba(0,0,0,0.15)"
                         : selectedStoryId === story.id
                         ? "0 4px 12px rgba(0,0,0,0.1)"
+                        : isHighPriority
+                        ? "0 2px 8px rgba(239,68,68,0.3)"
                         : "0 1px 4px rgba(0,0,0,0.06)",
                   }}
                   transition={{ type: "spring", stiffness: 300, damping: 25 }}
                 >
+                  {/* Pulse ring for high/critical priority */}
+                  {isHighPriority && (
+                    <div
+                      className="absolute inset-0 rounded-xl animate-ping opacity-20"
+                      style={{ backgroundColor: story.priority === "critical" ? "#ef4444" : "#f97316" }}
+                    />
+                  )}
+
                   <div
-                    className={`w-full h-full rounded-xl flex items-center justify-center border-2 transition-colors ${
+                    className={`w-full h-full rounded-xl flex items-center justify-center border-2 transition-colors relative ${
                       epicColor
                         ? ""
                         : isFullAi
                         ? "bg-violet-50 border-violet-300"
                         : "bg-amber-50 border-amber-300"
-                    } ${selectedStoryId === story.id ? "ring-2 ring-foreground ring-offset-2" : ""}`}
-                    style={
-                      epicColor
+                    } ${selectedStoryId === story.id ? "ring-2 ring-foreground ring-offset-2" : ""}
+                    ${isHighPriority ? "ring-2 ring-offset-1" : ""}`}
+                    style={{
+                      ...(epicColor
                         ? { backgroundColor: `${epicColor}18`, borderColor: epicColor }
-                        : undefined
-                    }
+                        : {}),
+                      ...(isHighPriority
+                        ? { ringColor: story.priority === "critical" ? "#ef4444" : "#f97316" }
+                        : {}),
+                    }}
                   >
-                    {isFullAi ? (
-                      <Bot className="w-5 h-5" style={epicColor ? { color: epicColor } : { color: "#7c3aed" }} />
-                    ) : (
-                      <Wrench className="w-5 h-5" style={epicColor ? { color: epicColor } : { color: "#d97706" }} />
+                    {/* US ID inside the dot */}
+                    <span
+                      className="text-[10px] font-bold leading-none"
+                      style={{ color: accentColor }}
+                    >
+                      {story.storyNumber ? `US-${story.storyNumber}` : "US"}
+                    </span>
+
+                    {/* Priority indicator dot */}
+                    {isHighPriority && (
+                      <div
+                        className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white"
+                        style={{ backgroundColor: story.priority === "critical" ? "#ef4444" : "#f97316" }}
+                      />
                     )}
                   </div>
-
-                  {/* US number badge */}
-                  {story.storyNumber && (
-                    <div
-                      className="absolute -bottom-1 -right-1 text-[8px] font-bold px-1 py-0.5 rounded-md text-white leading-none"
-                      style={{ backgroundColor: epicColor || (isFullAi ? "#7c3aed" : "#d97706") }}
-                    >
-                      {story.storyNumber}
-                    </div>
-                  )}
 
                   {/* Tooltip */}
                   <AnimatePresence>
