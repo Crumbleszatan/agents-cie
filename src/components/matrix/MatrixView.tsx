@@ -30,6 +30,10 @@ export function MatrixView() {
   const [hoveredStory, setHoveredStory] = useState<string | null>(null);
   const [matrixSize, setMatrixSize] = useState(500);
 
+  // ─── Native drag: track live Y in a ref to avoid React re-render lag ───
+  const dragRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  const dotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
   // Snapshot KPIs before drag to compute delta
   const [snapshotKpis, setSnapshotKpis] = useState<{ avgImpact: number; quadrants: Record<string, number> } | null>(null);
 
@@ -86,14 +90,25 @@ export function MatrixView() {
     return { avgEffort: Math.round(sumEffort / total), avgImpact: Math.round(sumImpact / total), quadrants };
   }, [filteredStories]);
 
-  // ─── Drag & Drop (fixed: use getState to avoid stale closure) ───
+  // ─── Native Drag & Drop ───
+  // mouseDown: start drag, snapshot KPIs, register native listeners
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, storyId: string) => {
       e.preventDefault();
       e.stopPropagation();
+
+      const story = useStore.getState().stories.find((s) => s.id === storyId);
+      if (!story) return;
+
+      const pos = story.matrixPosition || { x: story.effort || 50, y: story.impact || 50 };
+      dragRef.current = { id: storyId, x: pos.x, y: pos.y };
       setDraggingId(storyId);
       selectStoryForEditing(storyId);
-      // Snapshot KPIs before drag starts
+
+      document.body.style.cursor = "ns-resize";
+      document.body.style.userSelect = "none";
+
+      // Snapshot KPIs
       const currentStories = useStore.getState().stories;
       const filtered = currentStories.filter((st) => {
         if (filterEpic !== "all" && st.epicId !== filterEpic) return false;
@@ -105,34 +120,48 @@ export function MatrixView() {
         const sumImpact = filtered.reduce((s, st) => s + (st.matrixPosition?.y ?? st.impact ?? 50), 0);
         const quadrants: Record<string, number> = { "quick-wins": 0, strategic: 0, "fill-in": 0, avoid: 0 };
         filtered.forEach((st) => {
-          const pos = st.matrixPosition || { x: 50, y: 50 };
-          quadrants[getQuadrant(pos.x, pos.y)]++;
+          const p = st.matrixPosition || { x: 50, y: 50 };
+          quadrants[getQuadrant(p.x, p.y)]++;
         });
         setSnapshotKpis({ avgImpact: Math.round(sumImpact / total), quadrants });
       }
-    },
-    [selectStoryForEditing, filterEpic, filterStatus]
-  );
 
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (!draggingId || !matrixRef.current) return;
-      const rect = matrixRef.current.getBoundingClientRect();
-      const y = Math.max(0, Math.min(100, 100 - ((e.clientY - rect.top) / rect.height) * 100));
-      // Read fresh state to get current X position
-      const currentStories = useStore.getState().stories;
-      const story = currentStories.find((s) => s.id === draggingId);
-      if (story) {
-        updateStoryMatrixPosition(draggingId, story.matrixPosition?.x ?? story.effort ?? 50, y);
-      }
-    },
-    [draggingId, updateStoryMatrixPosition]
-  );
+      // Native mousemove: update DOM directly (no React re-render)
+      const onMouseMove = (ev: MouseEvent) => {
+        if (!dragRef.current || !matrixRef.current) return;
+        const rect = matrixRef.current.getBoundingClientRect();
+        const newY = Math.max(0, Math.min(100, 100 - ((ev.clientY - rect.top) / rect.height) * 100));
+        dragRef.current.y = newY;
 
-  const handleMouseUp = useCallback(() => {
-    setDraggingId(null);
-    setSnapshotKpis(null);
-  }, []);
+        // Move the dot directly via DOM
+        const dotEl = dotRefs.current.get(storyId);
+        if (dotEl) {
+          const topPx = ((100 - newY) / 100) * rect.height - DOT_SIZE / 2;
+          dotEl.style.top = `${topPx}px`;
+        }
+      };
+
+      // Native mouseup: commit to store + persist, cleanup
+      const onMouseUp = () => {
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+
+        if (dragRef.current) {
+          // Commit final position to Zustand store (will persist to DB)
+          updateStoryMatrixPosition(dragRef.current.id, dragRef.current.x, dragRef.current.y);
+          dragRef.current = null;
+        }
+        setDraggingId(null);
+        setSnapshotKpis(null);
+      };
+
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    },
+    [selectStoryForEditing, filterEpic, filterStatus, updateStoryMatrixPosition]
+  );
 
   const getQuadrantInfo = (quadrant: string) => {
     switch (quadrant) {
@@ -160,7 +189,6 @@ export function MatrixView() {
   // ─── Epic edges: connect stories sharing same epic ───
   const epicEdges = useMemo(() => {
     const edges: { from: { x: number; y: number }; to: { x: number; y: number }; color: string }[] = [];
-    // Group filtered stories by epicId
     const epicGroups: Record<string, typeof filteredStories> = {};
     filteredStories.forEach((story) => {
       if (story.epicId) {
@@ -172,7 +200,6 @@ export function MatrixView() {
       if (group.length < 2) return;
       const epic = epics.find((e) => e.id === epicId);
       const color = epic?.color || "#a0a0a0";
-      // Chain stories in the group
       for (let i = 0; i < group.length - 1; i++) {
         const a = group[i].matrixPosition || { x: 50, y: 50 };
         const b = group[i + 1].matrixPosition || { x: 50, y: 50 };
@@ -331,9 +358,6 @@ export function MatrixView() {
           <div
             ref={matrixRef}
             className="absolute inset-0 z-10"
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
           >
             {filteredStories.map((story) => {
               const pos = story.matrixPosition || { x: 50, y: 50 };
@@ -343,30 +367,36 @@ export function MatrixView() {
               const epicColor = getEpicColor(story.epicId);
               const isHighPriority = story.priority === "high" || story.priority === "critical";
               const accentColor = epicColor || (isFullAi ? "#7c3aed" : "#d97706");
+              const isDragging = draggingId === story.id;
 
               return (
-                <motion.div
+                <div
                   key={story.id}
-                  className={`absolute select-none ${
-                    draggingId === story.id ? "z-30 cursor-grabbing" : "z-20 cursor-ns-resize"
-                  }`}
-                  style={{ left, top, width: DOT_SIZE, height: DOT_SIZE }}
-                  onMouseDown={(e) => handleMouseDown(e, story.id)}
-                  onMouseEnter={() => setHoveredStory(story.id)}
-                  onMouseLeave={() => setHoveredStory(null)}
-                  whileHover={{ scale: 1.15 }}
-                  animate={{
-                    scale: draggingId === story.id ? 1.2 : selectedStoryId === story.id ? 1.1 : 1,
-                    boxShadow:
-                      draggingId === story.id
-                        ? "0 8px 24px rgba(0,0,0,0.15)"
-                        : selectedStoryId === story.id
-                        ? "0 4px 12px rgba(0,0,0,0.1)"
-                        : isHighPriority
-                        ? "0 2px 8px rgba(239,68,68,0.3)"
-                        : "0 1px 4px rgba(0,0,0,0.06)",
+                  ref={(el) => {
+                    if (el) dotRefs.current.set(story.id, el);
+                    else dotRefs.current.delete(story.id);
                   }}
-                  transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                  className={`absolute select-none ${
+                    isDragging ? "z-30 cursor-grabbing" : "z-20 cursor-ns-resize"
+                  }`}
+                  style={{
+                    left,
+                    top,
+                    width: DOT_SIZE,
+                    height: DOT_SIZE,
+                    transform: isDragging ? "scale(1.2)" : selectedStoryId === story.id ? "scale(1.1)" : "scale(1)",
+                    boxShadow: isDragging
+                      ? "0 8px 24px rgba(0,0,0,0.15)"
+                      : selectedStoryId === story.id
+                      ? "0 4px 12px rgba(0,0,0,0.1)"
+                      : isHighPriority
+                      ? "0 2px 8px rgba(239,68,68,0.3)"
+                      : "0 1px 4px rgba(0,0,0,0.06)",
+                    transition: isDragging ? "transform 0.1s, box-shadow 0.1s" : "all 0.25s ease",
+                  }}
+                  onMouseDown={(e) => handleMouseDown(e, story.id)}
+                  onMouseEnter={() => !draggingId && setHoveredStory(story.id)}
+                  onMouseLeave={() => setHoveredStory(null)}
                 >
                   {/* Pulse ring for high/critical priority */}
                   {isHighPriority && (
@@ -413,7 +443,7 @@ export function MatrixView() {
 
                   {/* Tooltip */}
                   <AnimatePresence>
-                    {hoveredStory === story.id && draggingId !== story.id && (
+                    {hoveredStory === story.id && !isDragging && (
                       <motion.div
                         initial={{ opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -421,7 +451,7 @@ export function MatrixView() {
                         className="absolute left-1/2 -translate-x-1/2 -top-2 -translate-y-full bg-foreground text-white rounded-lg px-3 py-2 shadow-elevated z-50 whitespace-nowrap pointer-events-none"
                       >
                         <p className="text-xs font-medium">
-                          {story.storyNumber ? `US-${story.storyNumber} · ` : ""}{story.title || "Sans titre"}
+                          {story.storyNumber ? `US-${story.storyNumber} \u00B7 ` : ""}{story.title || "Sans titre"}
                         </p>
                         <p className="text-[10px] text-white/60 mt-0.5">
                           {story.storyPoints || "?"} pts &middot; {getQuadrantInfo(getQuadrant(pos.x, pos.y)).label}
@@ -435,7 +465,7 @@ export function MatrixView() {
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </motion.div>
+                </div>
               );
             })}
           </div>
