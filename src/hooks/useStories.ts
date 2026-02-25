@@ -9,6 +9,7 @@ import type { UserStory } from "@/types";
 function dbToStory(row: any): UserStory {
   return {
     id: row.id,
+    storyNumber: row.story_number ?? undefined,
     title: row.title || "",
     asA: row.as_a || "",
     iWant: row.i_want || "",
@@ -66,6 +67,7 @@ function storyToDb(story: Partial<UserStory>, projectId?: string, userId?: strin
   if (story.gitBranch !== undefined) result.git_branch = story.gitBranch;
   if (story.completionPercent !== undefined) result.completion_percent = story.completionPercent;
   if (story.epicId !== undefined) result.epic_id = story.epicId;
+  if (story.storyNumber !== undefined) result.story_number = story.storyNumber;
   return result;
 }
 

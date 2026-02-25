@@ -53,6 +53,7 @@ export interface JiraTicket {
 
 export interface UserStory {
   id: string;
+  storyNumber?: number; // Auto-increment display ID (US-1, US-2...)
   title: string;
   asA: string;
   iWant: string;

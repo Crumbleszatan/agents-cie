@@ -137,6 +137,9 @@ export function StoryListPanel() {
 
                     {/* Title */}
                     <span className="flex-1 text-xs font-medium truncate">
+                      {story.storyNumber && (
+                        <span className="text-muted-foreground font-mono mr-1">US-{story.storyNumber}</span>
+                      )}
                       {story.title || "Sans titre"}
                     </span>
 

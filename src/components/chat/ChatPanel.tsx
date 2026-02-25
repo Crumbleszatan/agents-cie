@@ -38,6 +38,7 @@ export function ChatPanel() {
   const setHighlightSelector = useStore((s) => s.setHighlightSelector);
   const setDomModifications = useStore((s) => s.setDomModifications);
   const currentStoryTitle = useStore((s) => s.currentStory.title);
+  const currentStoryNumber = useStore((s) => s.currentStory.storyNumber);
   const currentStoryId = useStore((s) => s.currentStory.id);
   const stories = useStore((s) => s.stories);
   const startNewStory = useStore((s) => s.startNewStory);
@@ -210,9 +211,9 @@ export function ChatPanel() {
             </div>
             <div>
               <h2 className="text-sm font-semibold">Assistant IA</h2>
-              {currentStoryTitle && (
+              {(currentStoryTitle || currentStoryNumber) && (
                 <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">
-                  {currentStoryTitle}
+                  {currentStoryNumber ? `US-${currentStoryNumber} · ` : ""}{currentStoryTitle}
                 </p>
               )}
             </div>
@@ -371,8 +372,8 @@ export function ChatPanel() {
       {/* Input Area — hidden when history is open */}
       {!showHistory && (
       <div className="p-3 border-t border-border-light">
-        <div className="flex items-end gap-2 bg-muted rounded-2xl px-3 py-2">
-          <button className="p-1.5 rounded-lg hover:bg-white/60 transition-colors text-muted-foreground">
+        <div className="flex items-center gap-2 bg-muted rounded-2xl px-3 py-2">
+          <button className="p-1.5 rounded-lg hover:bg-white/60 transition-colors text-muted-foreground flex-shrink-0 self-end mb-0.5">
             <Paperclip className="w-4 h-4" />
           </button>
           <textarea
@@ -381,13 +382,13 @@ export function ChatPanel() {
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
             placeholder="Décrivez votre besoin..."
-            className="flex-1 bg-transparent text-sm resize-none outline-none placeholder:text-muted-foreground/60 min-h-[44px] max-h-[160px] py-2"
+            className="flex-1 bg-transparent text-sm resize-none outline-none placeholder:text-muted-foreground/60 min-h-[36px] max-h-[160px] py-1.5 leading-[22px]"
             rows={1}
           />
           <button
             onClick={handleSend}
             disabled={!input.trim() || isAiTyping}
-            className={`p-2 rounded-xl transition-all ${
+            className={`p-2 rounded-xl transition-all flex-shrink-0 self-end mb-0.5 ${
               input.trim() && !isAiTyping
                 ? "bg-foreground text-white hover:opacity-85"
                 : "bg-border text-muted-foreground"

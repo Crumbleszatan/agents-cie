@@ -4,6 +4,7 @@ import { useStore } from "@/store/useStore";
 import {
   FileText,
   Plus,
+  Save,
   Copy,
   ExternalLink,
 } from "lucide-react";
@@ -21,7 +22,11 @@ export function USPanel() {
       <div className="px-4 py-3 border-b border-border-light flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FileText className="w-4 h-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold">User Story</h2>
+          <h2 className="text-sm font-semibold">
+            {currentStory.storyNumber
+              ? `US-${currentStory.storyNumber}`
+              : "User Story"}
+          </h2>
           <span
             className={`tag ${
               currentStory.status === "draft"
@@ -55,6 +60,14 @@ export function USPanel() {
 
       {/* Footer */}
       <div className="px-4 py-3 border-t border-border-light space-y-2">
+        <button
+          onClick={() => saveCurrentStory()}
+          disabled={!currentStory.title}
+          className="w-full flex items-center justify-center gap-2 text-xs font-semibold py-2.5 rounded-xl bg-foreground text-white hover:opacity-90 transition-all disabled:opacity-40"
+        >
+          <Save className="w-3.5 h-3.5" />
+          Sauvegarder
+        </button>
         <button
           onClick={() => {
             saveCurrentStory();

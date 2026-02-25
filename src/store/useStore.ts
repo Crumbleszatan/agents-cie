@@ -334,25 +334,32 @@ export const useStore = create<AppState>((set, get) => ({
       // Persist to DB — use DB-generated ID if returned
       if (state._persistCreate) {
         state._persistCreate(storyWithEffort).then((dbStory) => {
-          if (dbStory && dbStory.id !== storyWithEffort.id) {
-            // Replace client-generated ID with DB ID
+          if (dbStory) {
+            const idChanged = dbStory.id !== storyWithEffort.id;
+            // Sync DB-generated fields (id, storyNumber) back to Zustand
             set((s) => ({
               stories: s.stories.map((st) =>
-                st.id === storyWithEffort.id ? { ...st, id: dbStory.id } : st
+                st.id === storyWithEffort.id
+                  ? { ...st, id: dbStory.id, storyNumber: dbStory.storyNumber }
+                  : st
               ),
               currentStory:
                 s.currentStory.id === storyWithEffort.id
-                  ? { ...s.currentStory, id: dbStory.id }
+                  ? { ...s.currentStory, id: dbStory.id, storyNumber: dbStory.storyNumber }
                   : s.currentStory,
-              // Also update messages storyId
-              messages: s.messages.map((m) =>
-                m.storyId === storyWithEffort.id ? { ...m, storyId: dbStory.id } : m
-              ),
+              // Also update messages storyId if ID changed
+              messages: idChanged
+                ? s.messages.map((m) =>
+                    m.storyId === storyWithEffort.id ? { ...m, storyId: dbStory.id } : m
+                  )
+                : s.messages,
             }));
-            // Backfill in DB
-            const latestState = get();
-            if (latestState._persistMsgLink) {
-              latestState._persistMsgLink(storyWithEffort.id, dbStory.id).catch(console.error);
+            // Backfill message links in DB if ID changed
+            if (idChanged) {
+              const latestState = get();
+              if (latestState._persistMsgLink) {
+                latestState._persistMsgLink(storyWithEffort.id, dbStory.id).catch(console.error);
+              }
             }
           }
         }).catch(console.error);

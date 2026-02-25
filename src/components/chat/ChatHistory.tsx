@@ -211,6 +211,9 @@ export function ChatHistory({ onClose }: { onClose: () => void }) {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-medium truncate">
+                        {conv.story.storyNumber && (
+                          <span className="text-muted-foreground font-mono mr-1.5">US-{conv.story.storyNumber}</span>
+                        )}
                         {conv.story.title || (
                           <span className="italic text-muted-foreground">Conversation en cours…</span>
                         )}

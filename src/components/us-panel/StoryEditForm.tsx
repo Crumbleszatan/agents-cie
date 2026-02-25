@@ -58,6 +58,8 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
   });
   const [newEpicTitle, setNewEpicTitle] = useState("");
   const [showNewEpic, setShowNewEpic] = useState(false);
+  const [showInlineNewEpic, setShowInlineNewEpic] = useState(false);
+  const [inlineEpicTitle, setInlineEpicTitle] = useState("");
   const [editingField, setEditingField] = useState<string | null>(null);
 
   const toggleSection = (key: keyof typeof expandedSections) => {
@@ -115,11 +117,71 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
             <option value="high">High</option>
             <option value="critical">Critical</option>
           </select>
-          {epics.length > 0 && (
+          {showInlineNewEpic ? (
+            <div className="flex items-center gap-1">
+              <input
+                value={inlineEpicTitle}
+                onChange={(e) => setInlineEpicTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && inlineEpicTitle.trim()) {
+                    const newEpic = {
+                      id: uuid(),
+                      title: inlineEpicTitle.trim(),
+                      description: "",
+                      color: EPIC_COLORS[epics.length % EPIC_COLORS.length],
+                      storyIds: [],
+                      createdAt: new Date().toISOString(),
+                    };
+                    addEpic(newEpic);
+                    updateStory({ epicId: newEpic.id });
+                    setInlineEpicTitle("");
+                    setShowInlineNewEpic(false);
+                  }
+                  if (e.key === "Escape") {
+                    setInlineEpicTitle("");
+                    setShowInlineNewEpic(false);
+                  }
+                }}
+                placeholder="Nom du nouvel epic..."
+                className="text-[11px] px-2 py-1 rounded-md border border-violet-300 outline-none bg-white w-[140px]"
+                autoFocus
+              />
+              <button
+                onClick={() => {
+                  if (inlineEpicTitle.trim()) {
+                    const newEpic = {
+                      id: uuid(),
+                      title: inlineEpicTitle.trim(),
+                      description: "",
+                      color: EPIC_COLORS[epics.length % EPIC_COLORS.length],
+                      storyIds: [],
+                      createdAt: new Date().toISOString(),
+                    };
+                    addEpic(newEpic);
+                    updateStory({ epicId: newEpic.id });
+                    setInlineEpicTitle("");
+                    setShowInlineNewEpic(false);
+                  }
+                }}
+                disabled={!inlineEpicTitle.trim()}
+                className="p-1 rounded-md bg-violet-600 text-white disabled:opacity-30"
+              >
+                <Check className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
             <select
               value={currentStory.epicId || ""}
-              onChange={(e) => updateStory({ epicId: e.target.value || undefined })}
-              className="text-[11px] font-medium px-2 py-1 rounded-md border-0 outline-none cursor-pointer bg-violet-50 text-violet-600"
+              onChange={(e) => {
+                if (e.target.value === "__new__") {
+                  setShowInlineNewEpic(true);
+                } else {
+                  updateStory({ epicId: e.target.value || undefined });
+                }
+              }}
+              className={`text-[11px] font-medium px-2 py-1 rounded-md border-0 outline-none cursor-pointer ${
+                currentStory.epicId ? "bg-violet-50 text-violet-600" : "bg-muted text-muted-foreground"
+              }`}
             >
               <option value="">Aucun Epic</option>
               {epics.map((epic) => (
@@ -127,6 +189,7 @@ export function StoryEditForm({ showEpicsSection = true }: StoryEditFormProps) {
                   {epic.title}
                 </option>
               ))}
+              <option value="__new__">+ Créer un epic</option>
             </select>
           )}
           {currentStory.storyPoints !== null && (
