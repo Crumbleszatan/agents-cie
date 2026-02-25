@@ -143,7 +143,7 @@ export function TopBar() {
   const displayProjectName = currentProject?.name || project?.name || "Aucun projet";
 
   return (
-    <div className="h-14 flex items-center px-4 border-b border-border-light bg-white/80 backdrop-blur-sm">
+    <div className="h-14 flex items-center px-4 border-b border-border-light bg-white/80 backdrop-blur-sm relative z-50">
       {/* Logo & Org & Project Switcher */}
       <div className="flex items-center gap-3">
         <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
