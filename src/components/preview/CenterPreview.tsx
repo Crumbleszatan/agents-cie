@@ -23,8 +23,6 @@ export function CenterPreview() {
   const setViewMode = useStore((s) => s.setViewMode);
   const selectedPageUrl = useStore((s) => s.selectedPageUrl);
   const project = useStore((s) => s.project);
-  const trainingStatus = useStore((s) => s.trainingStatus);
-
   // retryCount forces iframe reload
   const [retryCount, setRetryCount] = useState(0);
 
@@ -152,11 +150,7 @@ export function CenterPreview() {
               transition={{ duration: 0.2 }}
               className="absolute inset-0"
             >
-              {trainingStatus === "complete" ? (
-                <IAPreviewView retryCount={retryCount} />
-              ) : (
-                <TrainingPlaceholder status={trainingStatus} label="IA Preview" />
-              )}
+              <IAPreviewView retryCount={retryCount} />
             </motion.div>
           )}
 
@@ -169,45 +163,11 @@ export function CenterPreview() {
               transition={{ duration: 0.2 }}
               className="absolute inset-0"
             >
-              {trainingStatus === "complete" ? (
-                <ArchitectureView />
-              ) : (
-                <TrainingPlaceholder status={trainingStatus} label="Architecture" />
-              )}
+              <ArchitectureView />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-    </div>
-  );
-}
-
-function TrainingPlaceholder({
-  status,
-  label,
-}: {
-  status: "not_started" | "in_progress" | "complete";
-  label: string;
-}) {
-  return (
-    <div className="h-full flex flex-col items-center justify-center text-center px-8">
-      <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
-        <Sparkles className="w-8 h-8 text-muted-foreground" />
-      </div>
-      <h3 className="text-sm font-semibold mb-1">{label}</h3>
-      <p className="text-xs text-muted-foreground max-w-[280px]">
-        {status === "not_started"
-          ? "L'entraînement IA n'a pas encore été lancé. Configurez-le dans les paramètres du projet."
-          : "L'entraînement IA est en cours... Cette vue sera disponible une fois l'entraînement terminé."}
-      </p>
-      {status === "in_progress" && (
-        <div className="mt-4 flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-info animate-pulse" />
-          <span className="text-[10px] text-muted-foreground font-medium">
-            Entraînement en cours
-          </span>
-        </div>
-      )}
     </div>
   );
 }
