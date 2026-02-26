@@ -10,9 +10,15 @@ import {
   TrendingDown,
   Target,
   Gauge,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
 } from "lucide-react";
 
 const DOT_SIZE = 48;
+const CLUSTER_RADIUS = 12; // % distance threshold to cluster stories
+
+import type { UserStory } from "@/types";
 
 export function MatrixView() {
   const stories = useStore((s) => s.stories);
@@ -30,11 +36,20 @@ export function MatrixView() {
   const [hoveredStory, setHoveredStory] = useState<string | null>(null);
   const [matrixSize, setMatrixSize] = useState(500);
 
-  // ─── Native drag: track live Y in a ref to avoid React re-render lag ───
+  // ─── Zoom state ───
+  const [zoom, setZoom] = useState(1);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const isPanning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
+
+  // ─── Expanded cluster ───
+  const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
+
+  // ─── Native drag refs ───
   const dragRef = useRef<{ id: string; x: number; y: number } | null>(null);
   const dotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  // Snapshot KPIs before drag to compute delta
+  // Snapshot KPIs before drag
   const [snapshotKpis, setSnapshotKpis] = useState<{ avgImpact: number; quadrants: Record<string, number> } | null>(null);
 
   // Responsive matrix size
@@ -69,6 +84,50 @@ export function MatrixView() {
     return true;
   });
 
+  // ─── Clustering: group nearby stories ───
+  const { clusters, soloStories } = useMemo(() => {
+    // Adjust cluster radius by zoom — zoom in = smaller clusters
+    const radius = CLUSTER_RADIUS / zoom;
+    const used = new Set<string>();
+    const clusters: { id: string; stories: typeof filteredStories; cx: number; cy: number }[] = [];
+    const soloStories: typeof filteredStories = [];
+
+    // Simple greedy clustering
+    const sorted = [...filteredStories].sort((a, b) => {
+      const pa = a.matrixPosition || { x: 50, y: 50 };
+      const pb = b.matrixPosition || { x: 50, y: 50 };
+      return pa.x - pb.x || pa.y - pb.y;
+    });
+
+    for (const story of sorted) {
+      if (used.has(story.id)) continue;
+      const pos = story.matrixPosition || { x: 50, y: 50 };
+
+      // Find neighbors within radius
+      const neighbors = sorted.filter((s) => {
+        if (s.id === story.id || used.has(s.id)) return false;
+        const sp = s.matrixPosition || { x: 50, y: 50 };
+        const dx = sp.x - pos.x;
+        const dy = sp.y - pos.y;
+        return Math.sqrt(dx * dx + dy * dy) <= radius;
+      });
+
+      if (neighbors.length >= 1) {
+        // At least 2 stories close together → cluster
+        const group = [story, ...neighbors];
+        group.forEach((s) => used.add(s.id));
+        const cx = group.reduce((s, g) => s + (g.matrixPosition?.x ?? 50), 0) / group.length;
+        const cy = group.reduce((s, g) => s + (g.matrixPosition?.y ?? 50), 0) / group.length;
+        clusters.push({ id: group.map((g) => g.id).join("-"), stories: group, cx, cy });
+      } else {
+        used.add(story.id);
+        soloStories.push(story);
+      }
+    }
+
+    return { clusters, soloStories };
+  }, [filteredStories, zoom]);
+
   // ─── KPIs ───
   const getQuadrant = (x: number, y: number) => {
     if (x <= 50 && y > 50) return "quick-wins";
@@ -90,8 +149,52 @@ export function MatrixView() {
     return { avgEffort: Math.round(sumEffort / total), avgImpact: Math.round(sumImpact / total), quadrants };
   }, [filteredStories]);
 
+  // ─── Zoom: scroll wheel (native listener to avoid passive issue) ───
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.15 : 0.15;
+      setZoom((z) => Math.max(0.5, Math.min(4, z + delta)));
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, []);
+
+  // Keep React handler as no-op placeholder
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    // Handled by native listener above
+  }, []);
+
+  // ─── Pan: right-click drag ───
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault(); // Suppress context menu
+  }, []);
+
+  const handlePanStart = useCallback((e: React.MouseEvent) => {
+    // Only pan on right-click (button === 2)
+    if (e.button !== 2) return;
+    e.preventDefault();
+    isPanning.current = true;
+    panStart.current = { x: e.clientX, y: e.clientY, ox: panOffset.x, oy: panOffset.y };
+
+    const onMove = (ev: MouseEvent) => {
+      if (!isPanning.current) return;
+      const dx = ev.clientX - panStart.current.x;
+      const dy = ev.clientY - panStart.current.y;
+      setPanOffset({ x: panStart.current.ox + dx, y: panStart.current.oy + dy });
+    };
+    const onUp = () => {
+      isPanning.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [panOffset]);
+
   // ─── Native Drag & Drop ───
-  // mouseDown: start drag, snapshot KPIs, register native listeners
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, storyId: string) => {
       e.preventDefault();
@@ -104,6 +207,7 @@ export function MatrixView() {
       dragRef.current = { id: storyId, x: pos.x, y: pos.y };
       setDraggingId(storyId);
       selectStoryForEditing(storyId);
+      setExpandedClusterId(null);
 
       document.body.style.cursor = "ns-resize";
       document.body.style.userSelect = "none";
@@ -126,14 +230,11 @@ export function MatrixView() {
         setSnapshotKpis({ avgImpact: Math.round(sumImpact / total), quadrants });
       }
 
-      // Native mousemove: update DOM directly (no React re-render)
       const onMouseMove = (ev: MouseEvent) => {
         if (!dragRef.current || !matrixRef.current) return;
         const rect = matrixRef.current.getBoundingClientRect();
         const newY = Math.max(0, Math.min(100, 100 - ((ev.clientY - rect.top) / rect.height) * 100));
         dragRef.current.y = newY;
-
-        // Move the dot directly via DOM
         const dotEl = dotRefs.current.get(storyId);
         if (dotEl) {
           const topPx = ((100 - newY) / 100) * rect.height - DOT_SIZE / 2;
@@ -141,15 +242,12 @@ export function MatrixView() {
         }
       };
 
-      // Native mouseup: commit to store + persist, cleanup
       const onMouseUp = () => {
         document.removeEventListener("mousemove", onMouseMove);
         document.removeEventListener("mouseup", onMouseUp);
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
-
         if (dragRef.current) {
-          // Commit final position to Zustand store (will persist to DB)
           updateStoryMatrixPosition(dragRef.current.id, dragRef.current.x, dragRef.current.y);
           dragRef.current = null;
         }
@@ -165,16 +263,11 @@ export function MatrixView() {
 
   const getQuadrantInfo = (quadrant: string) => {
     switch (quadrant) {
-      case "quick-wins":
-        return { label: "Quick Wins", emoji: "\u26A1" };
-      case "strategic":
-        return { label: "Strat\u00E9gique", emoji: "\uD83C\uDFAF" };
-      case "fill-in":
-        return { label: "Fill-in", emoji: "\u23F3" };
-      case "avoid":
-        return { label: "\u00C0 \u00E9viter", emoji: "\u26A0\uFE0F" };
-      default:
-        return { label: "", emoji: "" };
+      case "quick-wins": return { label: "Quick Wins" };
+      case "strategic": return { label: "Strat\u00E9gique" };
+      case "fill-in": return { label: "Fill-in" };
+      case "avoid": return { label: "\u00C0 \u00E9viter" };
+      default: return { label: "" };
     }
   };
 
@@ -186,7 +279,11 @@ export function MatrixView() {
     });
   };
 
-  // Helper: get epic color for a story
+  const handleResetZoom = () => {
+    setZoom(1);
+    setPanOffset({ x: 0, y: 0 });
+  };
+
   const getEpicColor = useCallback(
     (epicId?: string) => {
       if (!epicId) return null;
@@ -195,7 +292,6 @@ export function MatrixView() {
     [epics]
   );
 
-  // Delta indicator component
   const DeltaBadge = ({ current, previous }: { current: number; previous: number }) => {
     const delta = current - previous;
     if (delta === 0) return null;
@@ -205,6 +301,102 @@ export function MatrixView() {
         {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
         {isUp ? "+" : ""}{delta}
       </span>
+    );
+  };
+
+  // ─── Render a single story dot ───
+  const renderDot = (story: typeof filteredStories[0]) => {
+    const pos = story.matrixPosition || { x: 50, y: 50 };
+    const left = (pos.x / 100) * matrixSize - DOT_SIZE / 2;
+    const top = ((100 - pos.y) / 100) * matrixSize - DOT_SIZE / 2;
+    const isFullAi = story.productionMode === "full-ai";
+    const epicColor = getEpicColor(story.epicId);
+    const isHighPriority = story.priority === "high" || story.priority === "critical";
+    const accentColor = epicColor || (isFullAi ? "#7c3aed" : "#d97706");
+    const isDragging = draggingId === story.id;
+
+    return (
+      <div
+        key={story.id}
+        ref={(el) => {
+          if (el) dotRefs.current.set(story.id, el);
+          else dotRefs.current.delete(story.id);
+        }}
+        className={`absolute select-none ${
+          isDragging ? "z-30 cursor-grabbing" : "z-20 cursor-ns-resize"
+        }`}
+        style={{
+          left,
+          top,
+          width: DOT_SIZE,
+          height: DOT_SIZE,
+          transform: isDragging ? "scale(1.2)" : selectedStoryId === story.id ? "scale(1.1)" : "scale(1)",
+          boxShadow: isDragging
+            ? "0 8px 24px rgba(0,0,0,0.15)"
+            : selectedStoryId === story.id
+            ? "0 4px 12px rgba(0,0,0,0.1)"
+            : isHighPriority
+            ? "0 2px 8px rgba(239,68,68,0.3)"
+            : "0 1px 4px rgba(0,0,0,0.06)",
+          transition: isDragging ? "transform 0.1s, box-shadow 0.1s" : "all 0.25s ease",
+        }}
+        onMouseDown={(e) => handleMouseDown(e, story.id)}
+        onMouseEnter={() => !draggingId && setHoveredStory(story.id)}
+        onMouseLeave={() => setHoveredStory(null)}
+      >
+        {isHighPriority && (
+          <div
+            className="absolute inset-0 rounded-xl animate-ping opacity-20"
+            style={{ backgroundColor: story.priority === "critical" ? "#ef4444" : "#f97316" }}
+          />
+        )}
+
+        <div
+          className={`w-full h-full rounded-xl flex items-center justify-center border-2 transition-colors relative ${
+            epicColor ? "" : isFullAi ? "bg-violet-50 border-violet-300" : "bg-amber-50 border-amber-300"
+          } ${selectedStoryId === story.id ? "ring-2 ring-foreground ring-offset-2" : ""}
+          ${isHighPriority ? "ring-2 ring-offset-1" : ""}`}
+          style={{
+            ...(epicColor ? { backgroundColor: `${epicColor}18`, borderColor: epicColor } : {}),
+            ...(isHighPriority ? { ringColor: story.priority === "critical" ? "#ef4444" : "#f97316" } : {}),
+          }}
+        >
+          <span className="text-[10px] font-bold leading-none" style={{ color: accentColor }}>
+            {story.storyNumber ? `US-${story.storyNumber}` : "US"}
+          </span>
+          {isHighPriority && (
+            <div
+              className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white"
+              style={{ backgroundColor: story.priority === "critical" ? "#ef4444" : "#f97316" }}
+            />
+          )}
+        </div>
+
+        {/* Tooltip */}
+        <AnimatePresence>
+          {hoveredStory === story.id && !isDragging && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="absolute left-1/2 -translate-x-1/2 -top-2 -translate-y-full bg-foreground text-white rounded-lg px-3 py-2 shadow-elevated z-50 whitespace-nowrap pointer-events-none"
+            >
+              <p className="text-xs font-medium">
+                {story.storyNumber ? `US-${story.storyNumber} \u00B7 ` : ""}{story.title || "Sans titre"}
+              </p>
+              <p className="text-[10px] text-white/60 mt-0.5">
+                {story.storyPoints || "?"} pts &middot; {getQuadrantInfo(getQuadrant(pos.x, pos.y)).label}
+                {story.epicId && epics.find((e) => e.id === story.epicId) && (
+                  <> &middot; {epics.find((e) => e.id === story.epicId)!.title}</>
+                )}
+              </p>
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-0 translate-y-full">
+                <div className="w-2 h-2 bg-foreground rotate-45 -translate-y-1" />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     );
   };
 
@@ -221,13 +413,43 @@ export function MatrixView() {
             {filteredStories.length} / {stories.length} US &middot; Glissez verticalement pour ajuster l&apos;impact
           </p>
         </div>
-        <button
-          onClick={handleAutoPlace}
-          className="btn-secondary flex items-center gap-1.5 text-xs"
-        >
-          <RotateCcw className="w-3 h-3" />
-          Auto-placer
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Zoom controls */}
+          <button
+            onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
+            className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            title="Zoom +"
+          >
+            <ZoomIn className="w-3.5 h-3.5" />
+          </button>
+          <span className="text-[10px] text-muted-foreground font-mono w-8 text-center">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
+            className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            title="Zoom -"
+          >
+            <ZoomOut className="w-3.5 h-3.5" />
+          </button>
+          {zoom !== 1 && (
+            <button
+              onClick={handleResetZoom}
+              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+              title="R\u00E9initialiser le zoom"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <div className="w-px h-4 bg-border mx-1" />
+          <button
+            onClick={handleAutoPlace}
+            className="btn-secondary flex items-center gap-1.5 text-xs"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Auto-placer
+          </button>
+        </div>
       </div>
 
       {/* KPI Bar */}
@@ -276,8 +498,23 @@ export function MatrixView() {
       )}
 
       {/* Matrix Area */}
-      <div ref={containerRef} className="flex-1 flex items-center justify-center p-4 overflow-hidden">
-        <div className="relative" style={{ width: matrixSize, height: matrixSize }}>
+      <div
+        ref={containerRef}
+        className="flex-1 flex items-center justify-center p-4 overflow-hidden"
+        onWheel={handleWheel}
+        onMouseDown={handlePanStart}
+        onContextMenu={handleContextMenu}
+      >
+        <div
+          className="relative"
+          style={{
+            width: matrixSize,
+            height: matrixSize,
+            transform: `scale(${zoom}) translate(${panOffset.x / zoom}px, ${panOffset.y / zoom}px)`,
+            transformOrigin: "center center",
+            transition: draggingId ? "none" : "transform 0.2s ease",
+          }}
+        >
           {/* Quadrant backgrounds */}
           <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 rounded-2xl overflow-hidden border border-border-light">
             <div className="bg-gray-50/30 border-r border-b border-border-light/50 flex items-start justify-start p-3">
@@ -311,115 +548,45 @@ export function MatrixView() {
             ref={matrixRef}
             className="absolute inset-0 z-10"
           >
-            {filteredStories.map((story) => {
-              const pos = story.matrixPosition || { x: 50, y: 50 };
-              const left = (pos.x / 100) * matrixSize - DOT_SIZE / 2;
-              const top = ((100 - pos.y) / 100) * matrixSize - DOT_SIZE / 2;
-              const isFullAi = story.productionMode === "full-ai";
-              const epicColor = getEpicColor(story.epicId);
-              const isHighPriority = story.priority === "high" || story.priority === "critical";
-              const accentColor = epicColor || (isFullAi ? "#7c3aed" : "#d97706");
-              const isDragging = draggingId === story.id;
+            {/* Cluster bubbles */}
+            {clusters.map((cluster) => {
+              const left = (cluster.cx / 100) * matrixSize - 28;
+              const top = ((100 - cluster.cy) / 100) * matrixSize - 28;
+              const isExpanded = expandedClusterId === cluster.id;
 
               return (
-                <div
-                  key={story.id}
-                  ref={(el) => {
-                    if (el) dotRefs.current.set(story.id, el);
-                    else dotRefs.current.delete(story.id);
-                  }}
-                  className={`absolute select-none ${
-                    isDragging ? "z-30 cursor-grabbing" : "z-20 cursor-ns-resize"
-                  }`}
-                  style={{
-                    left,
-                    top,
-                    width: DOT_SIZE,
-                    height: DOT_SIZE,
-                    transform: isDragging ? "scale(1.2)" : selectedStoryId === story.id ? "scale(1.1)" : "scale(1)",
-                    boxShadow: isDragging
-                      ? "0 8px 24px rgba(0,0,0,0.15)"
-                      : selectedStoryId === story.id
-                      ? "0 4px 12px rgba(0,0,0,0.1)"
-                      : isHighPriority
-                      ? "0 2px 8px rgba(239,68,68,0.3)"
-                      : "0 1px 4px rgba(0,0,0,0.06)",
-                    transition: isDragging ? "transform 0.1s, box-shadow 0.1s" : "all 0.25s ease",
-                  }}
-                  onMouseDown={(e) => handleMouseDown(e, story.id)}
-                  onMouseEnter={() => !draggingId && setHoveredStory(story.id)}
-                  onMouseLeave={() => setHoveredStory(null)}
-                >
-                  {/* Pulse ring for high/critical priority */}
-                  {isHighPriority && (
+                <div key={cluster.id}>
+                  {/* Cluster bubble */}
+                  {!isExpanded && (
                     <div
-                      className="absolute inset-0 rounded-xl animate-ping opacity-20"
-                      style={{ backgroundColor: story.priority === "critical" ? "#ef4444" : "#f97316" }}
-                    />
+                      className="absolute z-[25] cursor-pointer"
+                      style={{ left, top, width: 56, height: 56 }}
+                      onClick={() => setExpandedClusterId(cluster.id)}
+                    >
+                      <div className="w-full h-full rounded-2xl bg-foreground/[0.08] border-2 border-foreground/20 backdrop-blur-sm flex flex-col items-center justify-center hover:bg-foreground/[0.12] hover:border-foreground/30 transition-all shadow-sm">
+                        <span className="text-sm font-bold text-foreground">{cluster.stories.length}</span>
+                        <span className="text-[8px] text-muted-foreground font-medium -mt-0.5">US</span>
+                      </div>
+                    </div>
                   )}
 
-                  <div
-                    className={`w-full h-full rounded-xl flex items-center justify-center border-2 transition-colors relative ${
-                      epicColor
-                        ? ""
-                        : isFullAi
-                        ? "bg-violet-50 border-violet-300"
-                        : "bg-amber-50 border-amber-300"
-                    } ${selectedStoryId === story.id ? "ring-2 ring-foreground ring-offset-2" : ""}
-                    ${isHighPriority ? "ring-2 ring-offset-1" : ""}`}
-                    style={{
-                      ...(epicColor
-                        ? { backgroundColor: `${epicColor}18`, borderColor: epicColor }
-                        : {}),
-                      ...(isHighPriority
-                        ? { ringColor: story.priority === "critical" ? "#ef4444" : "#f97316" }
-                        : {}),
-                    }}
-                  >
-                    {/* US ID inside the dot */}
-                    <span
-                      className="text-[10px] font-bold leading-none"
-                      style={{ color: accentColor }}
-                    >
-                      {story.storyNumber ? `US-${story.storyNumber}` : "US"}
-                    </span>
-
-                    {/* Priority indicator dot */}
-                    {isHighPriority && (
+                  {/* Expanded: show individual dots */}
+                  {isExpanded && (
+                    <>
+                      {/* Backdrop to close */}
                       <div
-                        className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white"
-                        style={{ backgroundColor: story.priority === "critical" ? "#ef4444" : "#f97316" }}
+                        className="fixed inset-0 z-20"
+                        onClick={() => setExpandedClusterId(null)}
                       />
-                    )}
-                  </div>
-
-                  {/* Tooltip */}
-                  <AnimatePresence>
-                    {hoveredStory === story.id && !isDragging && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="absolute left-1/2 -translate-x-1/2 -top-2 -translate-y-full bg-foreground text-white rounded-lg px-3 py-2 shadow-elevated z-50 whitespace-nowrap pointer-events-none"
-                      >
-                        <p className="text-xs font-medium">
-                          {story.storyNumber ? `US-${story.storyNumber} \u00B7 ` : ""}{story.title || "Sans titre"}
-                        </p>
-                        <p className="text-[10px] text-white/60 mt-0.5">
-                          {story.storyPoints || "?"} pts &middot; {getQuadrantInfo(getQuadrant(pos.x, pos.y)).label}
-                          {story.epicId && epics.find((e) => e.id === story.epicId) && (
-                            <> &middot; {epics.find((e) => e.id === story.epicId)!.title}</>
-                          )}
-                        </p>
-                        <div className="absolute left-1/2 -translate-x-1/2 bottom-0 translate-y-full">
-                          <div className="w-2 h-2 bg-foreground rotate-45 -translate-y-1" />
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                      {cluster.stories.map((story) => renderDot(story))}
+                    </>
+                  )}
                 </div>
               );
             })}
+
+            {/* Solo stories (not in any cluster) */}
+            {soloStories.map((story) => renderDot(story))}
           </div>
         </div>
       </div>
