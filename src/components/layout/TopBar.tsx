@@ -145,7 +145,7 @@ export function TopBar() {
   return (
     <div className="h-14 flex items-center px-4 border-b border-border-light bg-white/80 backdrop-blur-sm relative z-50">
       {/* Logo & Org & Project Switcher */}
-      <div className="flex items-center gap-3">
+      <div className="flex-1 flex items-center gap-3">
         <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <div className="w-7 h-7 bg-foreground rounded-lg flex items-center justify-center">
             <Zap className="w-4 h-4 text-white" />
@@ -228,7 +228,7 @@ export function TopBar() {
       </div>
 
       {/* Main Phase Navigation */}
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex items-center justify-center">
         <div className="flex items-center gap-1 bg-muted rounded-xl p-1">
           {phases.map((phase, i) => {
             const Icon = phase.icon;
@@ -281,7 +281,7 @@ export function TopBar() {
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex-1 flex items-center justify-end gap-2">
         {currentProject?.git_provider && (
           <div className="tag">
             <GitBranch className="w-3 h-3" />
