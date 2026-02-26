@@ -42,7 +42,7 @@ export function MatrixView() {
   const panStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
 
   // ─── Native drag refs ───
-  const dragRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  const dragRef = useRef<{ id: string; x: number; y: number; cursorOffsetY: number } | null>(null);
   const dotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Snapshot KPIs before drag
@@ -147,7 +147,7 @@ export function MatrixView() {
 
       const oldZoom = zoomTargetRef.current;
       const delta = e.deltaY > 0 ? -0.06 : 0.06;
-      const newZoom = Math.max(0.5, Math.min(4, oldZoom + delta));
+      const newZoom = Math.max(0.5, Math.min(10, oldZoom + delta));
       zoomTargetRef.current = newZoom;
 
       // Adjust pan so the world point under cursor stays fixed
@@ -173,7 +173,7 @@ export function MatrixView() {
 
   // Sync zoomTargetRef when buttons change zoom (zoom towards center)
   const adjustZoom = useCallback((delta: number) => {
-    zoomTargetRef.current = Math.max(0.5, Math.min(4, zoomTargetRef.current + delta));
+    zoomTargetRef.current = Math.max(0.5, Math.min(10, zoomTargetRef.current + delta));
     startZoomAnimation();
   }, [startZoomAnimation]);
 
@@ -220,7 +220,18 @@ export function MatrixView() {
       if (!story) return;
 
       const pos = story.matrixPosition || { x: story.effort || 50, y: story.impact || 50 };
-      dragRef.current = { id: storyId, x: pos.x, y: pos.y };
+
+      // Capture exact offset between cursor and dot center (screen space)
+      // so the dot stays glued under the cursor with zero jump
+      let cursorOffsetY = 0;
+      const dotEl = dotRefs.current.get(storyId);
+      if (dotEl) {
+        const dotRect = dotEl.getBoundingClientRect();
+        const dotCenterY = dotRect.top + dotRect.height / 2;
+        cursorOffsetY = e.clientY - dotCenterY;
+      }
+
+      dragRef.current = { id: storyId, x: pos.x, y: pos.y, cursorOffsetY };
       setDraggingId(storyId);
       selectStoryForEditing(storyId);
 
@@ -248,14 +259,16 @@ export function MatrixView() {
       const onMouseMove = (ev: MouseEvent) => {
         if (!dragRef.current || !matrixRef.current) return;
         const rect = matrixRef.current.getBoundingClientRect();
-        // rect is in screen space (post-zoom), use it to convert mouse → %
-        const newY = Math.max(0, Math.min(100, 100 - ((ev.clientY - rect.top) / rect.height) * 100));
+        // Subtract the initial cursor offset so the dot center
+        // stays exactly where the user grabbed it — no jump at all
+        const adjustedY = ev.clientY - dragRef.current.cursorOffsetY;
+        const newY = Math.max(0, Math.min(100, 100 - ((adjustedY - rect.top) / rect.height) * 100));
         dragRef.current.y = newY;
-        const dotEl = dotRefs.current.get(storyId);
-        if (dotEl) {
+        const el = dotRefs.current.get(storyId);
+        if (el) {
           // Position in LOCAL coords (pre-zoom) — use matrixSize, not rect.height
           const topPx = ((100 - newY) / 100) * matrixSize - DOT_SIZE / 2;
-          dotEl.style.top = `${topPx}px`;
+          el.style.top = `${topPx}px`;
         }
       };
 
