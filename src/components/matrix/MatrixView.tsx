@@ -16,9 +16,6 @@ import {
 } from "lucide-react";
 
 const DOT_SIZE = 48;
-const CLUSTER_RADIUS = 12; // % distance threshold to cluster stories
-
-import type { UserStory } from "@/types";
 
 export function MatrixView() {
   const stories = useStore((s) => s.stories);
@@ -43,9 +40,6 @@ export function MatrixView() {
   const panOffsetRef = useRef({ x: 0, y: 0 });
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
-
-  // ─── Expanded cluster ───
-  const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
 
   // ─── Native drag refs ───
   const dragRef = useRef<{ id: string; x: number; y: number } | null>(null);
@@ -85,50 +79,6 @@ export function MatrixView() {
     if (filterStatus !== "all" && story.productionStatus !== filterStatus) return false;
     return true;
   });
-
-  // ─── Clustering: group nearby stories ───
-  const { clusters, soloStories } = useMemo(() => {
-    // Adjust cluster radius by zoom — zoom in = smaller clusters
-    const radius = CLUSTER_RADIUS / zoom;
-    const used = new Set<string>();
-    const clusters: { id: string; stories: typeof filteredStories; cx: number; cy: number }[] = [];
-    const soloStories: typeof filteredStories = [];
-
-    // Simple greedy clustering
-    const sorted = [...filteredStories].sort((a, b) => {
-      const pa = a.matrixPosition || { x: 50, y: 50 };
-      const pb = b.matrixPosition || { x: 50, y: 50 };
-      return pa.x - pb.x || pa.y - pb.y;
-    });
-
-    for (const story of sorted) {
-      if (used.has(story.id)) continue;
-      const pos = story.matrixPosition || { x: 50, y: 50 };
-
-      // Find neighbors within radius
-      const neighbors = sorted.filter((s) => {
-        if (s.id === story.id || used.has(s.id)) return false;
-        const sp = s.matrixPosition || { x: 50, y: 50 };
-        const dx = sp.x - pos.x;
-        const dy = sp.y - pos.y;
-        return Math.sqrt(dx * dx + dy * dy) <= radius;
-      });
-
-      if (neighbors.length >= 1) {
-        // At least 2 stories close together → cluster
-        const group = [story, ...neighbors];
-        group.forEach((s) => used.add(s.id));
-        const cx = group.reduce((s, g) => s + (g.matrixPosition?.x ?? 50), 0) / group.length;
-        const cy = group.reduce((s, g) => s + (g.matrixPosition?.y ?? 50), 0) / group.length;
-        clusters.push({ id: group.map((g) => g.id).join("-"), stories: group, cx, cy });
-      } else {
-        used.add(story.id);
-        soloStories.push(story);
-      }
-    }
-
-    return { clusters, soloStories };
-  }, [filteredStories, zoom]);
 
   // ─── KPIs ───
   const getQuadrant = (x: number, y: number) => {
@@ -231,7 +181,7 @@ export function MatrixView() {
   const handlePanStart = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest("[data-story-dot]") || target.closest("[data-cluster-bubble]")) return;
+    if (target.closest("[data-story-dot]")) return;
 
     e.preventDefault();
     isPanning.current = true;
@@ -273,7 +223,6 @@ export function MatrixView() {
       dragRef.current = { id: storyId, x: pos.x, y: pos.y };
       setDraggingId(storyId);
       selectStoryForEditing(storyId);
-      setExpandedClusterId(null);
 
       document.body.style.cursor = "ns-resize";
       document.body.style.userSelect = "none";
@@ -299,11 +248,13 @@ export function MatrixView() {
       const onMouseMove = (ev: MouseEvent) => {
         if (!dragRef.current || !matrixRef.current) return;
         const rect = matrixRef.current.getBoundingClientRect();
+        // rect is in screen space (post-zoom), use it to convert mouse → %
         const newY = Math.max(0, Math.min(100, 100 - ((ev.clientY - rect.top) / rect.height) * 100));
         dragRef.current.y = newY;
         const dotEl = dotRefs.current.get(storyId);
         if (dotEl) {
-          const topPx = ((100 - newY) / 100) * rect.height - DOT_SIZE / 2;
+          // Position in LOCAL coords (pre-zoom) — use matrixSize, not rect.height
+          const topPx = ((100 - newY) / 100) * matrixSize - DOT_SIZE / 2;
           dotEl.style.top = `${topPx}px`;
         }
       };
@@ -376,10 +327,9 @@ export function MatrixView() {
     const pos = story.matrixPosition || { x: 50, y: 50 };
     const left = (pos.x / 100) * matrixSize - DOT_SIZE / 2;
     const top = ((100 - pos.y) / 100) * matrixSize - DOT_SIZE / 2;
-    const isFullAi = story.productionMode === "full-ai";
     const epicColor = getEpicColor(story.epicId);
     const isHighPriority = story.priority === "high" || story.priority === "critical";
-    const accentColor = epicColor || (isFullAi ? "#7c3aed" : "#d97706");
+    const accentColor = epicColor || "#64748b"; // neutral slate when no epic
     const isDragging = draggingId === story.id;
 
     return (
@@ -421,7 +371,7 @@ export function MatrixView() {
 
         <div
           className={`w-full h-full rounded-xl flex items-center justify-center border-2 transition-colors relative ${
-            epicColor ? "" : isFullAi ? "bg-violet-50 border-violet-300" : "bg-amber-50 border-amber-300"
+            epicColor ? "" : "bg-slate-50 border-slate-300"
           } ${selectedStoryId === story.id ? "ring-2 ring-foreground ring-offset-2" : ""}
           ${isHighPriority ? "ring-2 ring-offset-1" : ""}`}
           style={{
@@ -614,46 +564,8 @@ export function MatrixView() {
             ref={matrixRef}
             className="absolute inset-0 z-10"
           >
-            {/* Cluster bubbles */}
-            {clusters.map((cluster) => {
-              const left = (cluster.cx / 100) * matrixSize - 28;
-              const top = ((100 - cluster.cy) / 100) * matrixSize - 28;
-              const isExpanded = expandedClusterId === cluster.id;
-
-              return (
-                <div key={cluster.id}>
-                  {/* Cluster bubble */}
-                  {!isExpanded && (
-                    <div
-                      data-cluster-bubble
-                      className="absolute z-[25] cursor-pointer"
-                      style={{ left, top, width: 56, height: 56 }}
-                      onClick={() => setExpandedClusterId(cluster.id)}
-                    >
-                      <div className="w-full h-full rounded-2xl bg-foreground/[0.08] border-2 border-foreground/20 backdrop-blur-sm flex flex-col items-center justify-center hover:bg-foreground/[0.12] hover:border-foreground/30 transition-all shadow-sm">
-                        <span className="text-sm font-bold text-foreground">{cluster.stories.length}</span>
-                        <span className="text-[8px] text-muted-foreground font-medium -mt-0.5">US</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Expanded: show individual dots */}
-                  {isExpanded && (
-                    <>
-                      {/* Backdrop to close */}
-                      <div
-                        className="fixed inset-0 z-20"
-                        onClick={() => setExpandedClusterId(null)}
-                      />
-                      {cluster.stories.map((story) => renderDot(story))}
-                    </>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* Solo stories (not in any cluster) */}
-            {soloStories.map((story) => renderDot(story))}
+            {/* Story dots */}
+            {filteredStories.map((story) => renderDot(story))}
           </div>
         </div>
       </div>
