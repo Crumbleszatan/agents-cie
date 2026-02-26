@@ -186,33 +186,6 @@ export function MatrixView() {
     });
   };
 
-  // ─── Epic edges: connect stories sharing same epic ───
-  const epicEdges = useMemo(() => {
-    const edges: { from: { x: number; y: number }; to: { x: number; y: number }; color: string }[] = [];
-    const epicGroups: Record<string, typeof filteredStories> = {};
-    filteredStories.forEach((story) => {
-      if (story.epicId) {
-        if (!epicGroups[story.epicId]) epicGroups[story.epicId] = [];
-        epicGroups[story.epicId].push(story);
-      }
-    });
-    Object.entries(epicGroups).forEach(([epicId, group]) => {
-      if (group.length < 2) return;
-      const epic = epics.find((e) => e.id === epicId);
-      const color = epic?.color || "#a0a0a0";
-      for (let i = 0; i < group.length - 1; i++) {
-        const a = group[i].matrixPosition || { x: 50, y: 50 };
-        const b = group[i + 1].matrixPosition || { x: 50, y: 50 };
-        edges.push({
-          from: { x: (a.x / 100) * matrixSize, y: ((100 - a.y) / 100) * matrixSize },
-          to: { x: (b.x / 100) * matrixSize, y: ((100 - b.y) / 100) * matrixSize },
-          color,
-        });
-      }
-    });
-    return edges;
-  }, [filteredStories, epics, matrixSize]);
-
   // Helper: get epic color for a story
   const getEpicColor = useCallback(
     (epicId?: string) => {
@@ -332,27 +305,6 @@ export function MatrixView() {
             <span className="text-[9px] text-muted-foreground font-medium writing-vertical">IMPACT &uarr;</span>
             <span className="text-[9px] text-muted-foreground writing-vertical">Faible impact</span>
           </div>
-
-          {/* Epic edges (SVG) */}
-          <svg
-            className="absolute inset-0 z-[5] pointer-events-none"
-            width={matrixSize}
-            height={matrixSize}
-          >
-            {epicEdges.map((edge, i) => (
-              <line
-                key={i}
-                x1={edge.from.x}
-                y1={edge.from.y}
-                x2={edge.to.x}
-                y2={edge.to.y}
-                stroke={edge.color}
-                strokeWidth={2}
-                strokeOpacity={0.4}
-                strokeDasharray="6 4"
-              />
-            ))}
-          </svg>
 
           {/* Draggable area */}
           <div
