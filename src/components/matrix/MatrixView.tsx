@@ -39,6 +39,8 @@ export function MatrixView() {
   // ─── Zoom state ───
   const [zoom, setZoom] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const zoomRef = useRef(1);
+  const panOffsetRef = useRef({ x: 0, y: 0 });
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
 
@@ -149,74 +151,93 @@ export function MatrixView() {
     return { avgEffort: Math.round(sumEffort / total), avgImpact: Math.round(sumImpact / total), quadrants };
   }, [filteredStories]);
 
-  // ─── Zoom: scroll wheel (native listener to avoid passive issue) ───
-  // Smooth zoom: use a target ref + requestAnimationFrame for interpolation
+  // ─── Zoom: scroll wheel — zoom towards cursor ───
   const zoomTargetRef = useRef(1);
+  const panTargetRef = useRef({ x: 0, y: 0 });
   const zoomRafRef = useRef<number | null>(null);
+
+  // Smooth lerp animation shared by wheel & buttons
+  const startZoomAnimation = useCallback(() => {
+    if (zoomRafRef.current) return;
+    const animate = () => {
+      const zDiff = zoomTargetRef.current - zoomRef.current;
+      const pxDiff = panTargetRef.current.x - panOffsetRef.current.x;
+      const pyDiff = panTargetRef.current.y - panOffsetRef.current.y;
+
+      if (Math.abs(zDiff) < 0.005 && Math.abs(pxDiff) < 0.5 && Math.abs(pyDiff) < 0.5) {
+        // Snap to final values
+        zoomRef.current = zoomTargetRef.current;
+        panOffsetRef.current = { ...panTargetRef.current };
+        setZoom(zoomTargetRef.current);
+        setPanOffset({ ...panTargetRef.current });
+        zoomRafRef.current = null;
+        return;
+      }
+
+      const factor = 0.18;
+      zoomRef.current += zDiff * factor;
+      panOffsetRef.current.x += pxDiff * factor;
+      panOffsetRef.current.y += pyDiff * factor;
+      setZoom(zoomRef.current);
+      setPanOffset({ x: panOffsetRef.current.x, y: panOffsetRef.current.y });
+      zoomRafRef.current = requestAnimationFrame(animate);
+    };
+    zoomRafRef.current = requestAnimationFrame(animate);
+  }, []);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const handler = (e: WheelEvent) => {
       e.preventDefault();
-      // Slow & smooth: small delta per scroll tick
-      const delta = e.deltaY > 0 ? -0.06 : 0.06;
-      zoomTargetRef.current = Math.max(0.5, Math.min(4, zoomTargetRef.current + delta));
+      const rect = el.getBoundingClientRect();
+      // Mouse position relative to container center
+      const mx = e.clientX - rect.left - rect.width / 2;
+      const my = e.clientY - rect.top - rect.height / 2;
 
-      // Animate toward target
-      if (!zoomRafRef.current) {
-        const animate = () => {
-          setZoom((current) => {
-            const diff = zoomTargetRef.current - current;
-            if (Math.abs(diff) < 0.005) {
-              zoomRafRef.current = null;
-              return zoomTargetRef.current;
-            }
-            zoomRafRef.current = requestAnimationFrame(animate);
-            return current + diff * 0.18; // lerp factor — lower = smoother
-          });
-        };
-        zoomRafRef.current = requestAnimationFrame(animate);
-      }
+      const oldZoom = zoomTargetRef.current;
+      const delta = e.deltaY > 0 ? -0.06 : 0.06;
+      const newZoom = Math.max(0.5, Math.min(4, oldZoom + delta));
+      zoomTargetRef.current = newZoom;
+
+      // Adjust pan so the world point under cursor stays fixed
+      // Screen pos = zoom * worldPos + panOffset
+      // worldPos = (screenPos - panOffset) / zoom
+      // We want: newZoom * worldPos + newPan = screenPos (same screen pos)
+      // => newPan = screenPos - newZoom * worldPos
+      //          = screenPos - newZoom * (screenPos - oldPan) / oldZoom
+      const oldPan = panTargetRef.current;
+      panTargetRef.current = {
+        x: mx - (newZoom / oldZoom) * (mx - oldPan.x),
+        y: my - (newZoom / oldZoom) * (my - oldPan.y),
+      };
+
+      startZoomAnimation();
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => {
       el.removeEventListener("wheel", handler);
       if (zoomRafRef.current) cancelAnimationFrame(zoomRafRef.current);
     };
-  }, []);
+  }, [startZoomAnimation]);
 
-  // Sync zoomTargetRef when buttons change zoom
+  // Sync zoomTargetRef when buttons change zoom (zoom towards center)
   const adjustZoom = useCallback((delta: number) => {
     zoomTargetRef.current = Math.max(0.5, Math.min(4, zoomTargetRef.current + delta));
-    // Smooth animate via raf
-    if (!zoomRafRef.current) {
-      const animate = () => {
-        setZoom((current) => {
-          const diff = zoomTargetRef.current - current;
-          if (Math.abs(diff) < 0.005) {
-            zoomRafRef.current = null;
-            return zoomTargetRef.current;
-          }
-          zoomRafRef.current = requestAnimationFrame(animate);
-          return current + diff * 0.18;
-        });
-      };
-      zoomRafRef.current = requestAnimationFrame(animate);
-    }
-  }, []);
+    startZoomAnimation();
+  }, [startZoomAnimation]);
 
   // ─── Pan: left-click drag on background (not on a dot or cluster) ───
   const handlePanStart = useCallback((e: React.MouseEvent) => {
-    // Only left-click (button === 0) and not on a dot/cluster
     if (e.button !== 0) return;
-    // Check if click target is a dot or cluster element — if so, let drag handle it
     const target = e.target as HTMLElement;
     if (target.closest("[data-story-dot]") || target.closest("[data-cluster-bubble]")) return;
 
     e.preventDefault();
     isPanning.current = true;
-    panStart.current = { x: e.clientX, y: e.clientY, ox: panOffset.x, oy: panOffset.y };
+    const ox = panOffsetRef.current.x;
+    const oy = panOffsetRef.current.y;
+    panStart.current = { x: e.clientX, y: e.clientY, ox, oy };
     document.body.style.cursor = "grab";
 
     const onMove = (ev: MouseEvent) => {
@@ -224,7 +245,10 @@ export function MatrixView() {
       document.body.style.cursor = "grabbing";
       const dx = ev.clientX - panStart.current.x;
       const dy = ev.clientY - panStart.current.y;
-      setPanOffset({ x: panStart.current.ox + dx, y: panStart.current.oy + dy });
+      const newPan = { x: panStart.current.ox + dx, y: panStart.current.oy + dy };
+      panOffsetRef.current = newPan;
+      panTargetRef.current = newPan;
+      setPanOffset(newPan);
     };
     const onUp = () => {
       isPanning.current = false;
@@ -234,7 +258,7 @@ export function MatrixView() {
     };
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
-  }, [panOffset]);
+  }, []);
 
   // ─── Native Drag & Drop ───
   const handleMouseDown = useCallback(
@@ -323,8 +347,8 @@ export function MatrixView() {
 
   const handleResetZoom = () => {
     zoomTargetRef.current = 1;
-    adjustZoom(0); // triggers smooth animation to target
-    setPanOffset({ x: 0, y: 0 });
+    panTargetRef.current = { x: 0, y: 0 };
+    startZoomAnimation();
   };
 
   const getEpicColor = useCallback(
