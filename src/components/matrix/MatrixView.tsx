@@ -150,43 +150,85 @@ export function MatrixView() {
   }, [filteredStories]);
 
   // ─── Zoom: scroll wheel (native listener to avoid passive issue) ───
+  // Smooth zoom: use a target ref + requestAnimationFrame for interpolation
+  const zoomTargetRef = useRef(1);
+  const zoomRafRef = useRef<number | null>(null);
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const handler = (e: WheelEvent) => {
       e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.15 : 0.15;
-      setZoom((z) => Math.max(0.5, Math.min(4, z + delta)));
+      // Slow & smooth: small delta per scroll tick
+      const delta = e.deltaY > 0 ? -0.06 : 0.06;
+      zoomTargetRef.current = Math.max(0.5, Math.min(4, zoomTargetRef.current + delta));
+
+      // Animate toward target
+      if (!zoomRafRef.current) {
+        const animate = () => {
+          setZoom((current) => {
+            const diff = zoomTargetRef.current - current;
+            if (Math.abs(diff) < 0.005) {
+              zoomRafRef.current = null;
+              return zoomTargetRef.current;
+            }
+            zoomRafRef.current = requestAnimationFrame(animate);
+            return current + diff * 0.18; // lerp factor — lower = smoother
+          });
+        };
+        zoomRafRef.current = requestAnimationFrame(animate);
+      }
     };
     el.addEventListener("wheel", handler, { passive: false });
-    return () => el.removeEventListener("wheel", handler);
+    return () => {
+      el.removeEventListener("wheel", handler);
+      if (zoomRafRef.current) cancelAnimationFrame(zoomRafRef.current);
+    };
   }, []);
 
-  // Keep React handler as no-op placeholder
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    // Handled by native listener above
+  // Sync zoomTargetRef when buttons change zoom
+  const adjustZoom = useCallback((delta: number) => {
+    zoomTargetRef.current = Math.max(0.5, Math.min(4, zoomTargetRef.current + delta));
+    // Smooth animate via raf
+    if (!zoomRafRef.current) {
+      const animate = () => {
+        setZoom((current) => {
+          const diff = zoomTargetRef.current - current;
+          if (Math.abs(diff) < 0.005) {
+            zoomRafRef.current = null;
+            return zoomTargetRef.current;
+          }
+          zoomRafRef.current = requestAnimationFrame(animate);
+          return current + diff * 0.18;
+        });
+      };
+      zoomRafRef.current = requestAnimationFrame(animate);
+    }
   }, []);
 
-  // ─── Pan: right-click drag ───
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault(); // Suppress context menu
-  }, []);
-
+  // ─── Pan: left-click drag on background (not on a dot or cluster) ───
   const handlePanStart = useCallback((e: React.MouseEvent) => {
-    // Only pan on right-click (button === 2)
-    if (e.button !== 2) return;
+    // Only left-click (button === 0) and not on a dot/cluster
+    if (e.button !== 0) return;
+    // Check if click target is a dot or cluster element — if so, let drag handle it
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-story-dot]") || target.closest("[data-cluster-bubble]")) return;
+
     e.preventDefault();
     isPanning.current = true;
     panStart.current = { x: e.clientX, y: e.clientY, ox: panOffset.x, oy: panOffset.y };
+    document.body.style.cursor = "grab";
 
     const onMove = (ev: MouseEvent) => {
       if (!isPanning.current) return;
+      document.body.style.cursor = "grabbing";
       const dx = ev.clientX - panStart.current.x;
       const dy = ev.clientY - panStart.current.y;
       setPanOffset({ x: panStart.current.ox + dx, y: panStart.current.oy + dy });
     };
     const onUp = () => {
       isPanning.current = false;
+      document.body.style.cursor = "";
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     };
@@ -280,7 +322,8 @@ export function MatrixView() {
   };
 
   const handleResetZoom = () => {
-    setZoom(1);
+    zoomTargetRef.current = 1;
+    adjustZoom(0); // triggers smooth animation to target
     setPanOffset({ x: 0, y: 0 });
   };
 
@@ -318,6 +361,7 @@ export function MatrixView() {
     return (
       <div
         key={story.id}
+        data-story-dot
         ref={(el) => {
           if (el) dotRefs.current.set(story.id, el);
           else dotRefs.current.delete(story.id);
@@ -416,7 +460,7 @@ export function MatrixView() {
         <div className="flex items-center gap-1">
           {/* Zoom controls */}
           <button
-            onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
+            onClick={() => adjustZoom(0.2)}
             className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
             title="Zoom +"
           >
@@ -426,7 +470,7 @@ export function MatrixView() {
             {Math.round(zoom * 100)}%
           </span>
           <button
-            onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
+            onClick={() => adjustZoom(-0.2)}
             className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
             title="Zoom -"
           >
@@ -501,9 +545,7 @@ export function MatrixView() {
       <div
         ref={containerRef}
         className="flex-1 flex items-center justify-center p-4 overflow-hidden"
-        onWheel={handleWheel}
         onMouseDown={handlePanStart}
-        onContextMenu={handleContextMenu}
       >
         <div
           className="relative"
@@ -512,7 +554,7 @@ export function MatrixView() {
             height: matrixSize,
             transform: `scale(${zoom}) translate(${panOffset.x / zoom}px, ${panOffset.y / zoom}px)`,
             transformOrigin: "center center",
-            transition: draggingId ? "none" : "transform 0.2s ease",
+            transition: draggingId ? "none" : "transform 0.08s ease-out",
           }}
         >
           {/* Quadrant backgrounds */}
@@ -559,6 +601,7 @@ export function MatrixView() {
                   {/* Cluster bubble */}
                   {!isExpanded && (
                     <div
+                      data-cluster-bubble
                       className="absolute z-[25] cursor-pointer"
                       style={{ left, top, width: 56, height: 56 }}
                       onClick={() => setExpandedClusterId(cluster.id)}
