@@ -318,8 +318,18 @@ export const useStore = create<AppState>((set, get) => ({
 
     const existing = state.stories.find((s) => s.id === story.id);
     if (existing) {
-      // Merge: preserve fields updated outside currentStory (e.g. matrixPosition from drag)
-      const merged = { ...existing, ...storyWithEffort };
+      // Merge: storyWithEffort has form edits, but existing has fresh
+      // matrixPosition / productionMode / productionStatus set by other
+      // actions (drag, mode toggle, kanban). Those must win over stale
+      // copies sitting in currentStory.
+      const merged = {
+        ...existing,           // start with latest store version
+        ...storyWithEffort,    // overlay form edits
+        // restore fields that are only mutated outside currentStory
+        matrixPosition: existing.matrixPosition,
+        productionMode: existing.productionMode,
+        productionStatus: existing.productionStatus,
+      };
       // Update in Zustand
       set({
         stories: state.stories.map((s) =>
