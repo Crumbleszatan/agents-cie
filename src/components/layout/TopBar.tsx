@@ -124,6 +124,9 @@ export function TopBar() {
 
   const currentPhaseIndex = phases.findIndex((p) => p.key === appPhase);
 
+  const clearShipSelection = useStore((s) => s.clearShipSelection);
+  const setShipDetailStoryId = useStore((s) => s.setShipDetailStoryId);
+
   const handlePhaseChange = (phase: AppPhase) => {
     // Disable Prioritize and Ship when no stories exist
     if (phase !== "build" && stories.length === 0) return;
@@ -136,6 +139,11 @@ export function TopBar() {
       setSelectedStoryId(null);
       setFilterEpic("all");
       setFilterStatus("all");
+    }
+    // Reset ship state when leaving Ship
+    if (appPhase === "ship" && phase !== "ship") {
+      clearShipSelection();
+      setShipDetailStoryId(null);
     }
     setAppPhase(phase);
   };

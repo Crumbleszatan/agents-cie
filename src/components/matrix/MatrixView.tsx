@@ -13,11 +13,16 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Check,
 } from "lucide-react";
 
 const DOT_SIZE = 48;
 
-export function MatrixView() {
+interface MatrixViewProps {
+  selectionMode?: boolean;
+}
+
+export function MatrixView({ selectionMode = false }: MatrixViewProps) {
   const stories = useStore((s) => s.stories);
   const epics = useStore((s) => s.epics);
   const updateStoryMatrixPosition = useStore((s) => s.updateStoryMatrixPosition);
@@ -26,6 +31,11 @@ export function MatrixView() {
   const selectStoryForEditing = useStore((s) => s.selectStoryForEditing);
   const filterEpic = useStore((s) => s.filterEpic);
   const filterStatus = useStore((s) => s.filterStatus);
+
+  // Ship selection state
+  const selectedForShip = useStore((s) => s.selectedForShip);
+  const toggleShipSelection = useStore((s) => s.toggleShipSelection);
+  const shippedStoryIds = useStore((s) => s.shippedStoryIds);
 
   const matrixRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -216,6 +226,14 @@ export function MatrixView() {
       e.preventDefault();
       e.stopPropagation();
 
+      // In selection mode, toggle selection instead of dragging
+      if (selectionMode) {
+        if (!shippedStoryIds.has(storyId)) {
+          toggleShipSelection(storyId);
+        }
+        return;
+      }
+
       const story = useStore.getState().stories.find((s) => s.id === storyId);
       if (!story) return;
 
@@ -288,7 +306,7 @@ export function MatrixView() {
       document.addEventListener("mousemove", onMouseMove);
       document.addEventListener("mouseup", onMouseUp);
     },
-    [selectStoryForEditing, filterEpic, filterStatus, updateStoryMatrixPosition]
+    [selectStoryForEditing, filterEpic, filterStatus, updateStoryMatrixPosition, selectionMode, shippedStoryIds, toggleShipSelection]
   );
 
   const getQuadrantInfo = (quadrant: string) => {
@@ -342,41 +360,48 @@ export function MatrixView() {
     const isHighPriority = story.priority === "high" || story.priority === "critical";
     const accentColor = epicColor || "#64748b"; // neutral slate when no epic
     const isDragging = draggingId === story.id;
+    const isShipped = selectionMode && shippedStoryIds.has(story.id);
+    const isSelectedForShip = selectionMode && selectedForShip.has(story.id);
 
     // Scale transform for selection/drag feedback + translate(-50%,-50%) to center on position
-    const dotScale = isDragging ? 1.2 : selectedStoryId === story.id ? 1.1 : 1;
+    const dotScale = isDragging ? 1.2 : isSelectedForShip ? 1.15 : selectedStoryId === story.id ? 1.1 : 1;
 
     return (
-      <div
+      <motion.div
         key={story.id}
+        layoutId={selectionMode ? `ship-dot-${story.id}` : undefined}
         data-story-dot
-        ref={(el) => {
+        ref={(el: HTMLDivElement | null) => {
           if (el) dotRefs.current.set(story.id, el);
           else dotRefs.current.delete(story.id);
         }}
         className={`absolute select-none ${
-          isDragging ? "z-40 cursor-grabbing" : selectedStoryId === story.id ? "z-30" : "z-20"
-        } cursor-ns-resize`}
+          isDragging ? "z-40 cursor-grabbing" : selectedStoryId === story.id || isSelectedForShip ? "z-30" : "z-20"
+        } ${selectionMode ? (isShipped ? "cursor-default" : "cursor-pointer") : "cursor-ns-resize"}`}
         style={{
           left: `${pos.x}%`,
           top: `${100 - pos.y}%`,
           width: DOT_SIZE,
           height: DOT_SIZE,
           transform: `translate(-50%, -50%) scale(${dotScale})`,
+          opacity: isShipped ? 0.25 : 1,
           boxShadow: isDragging
             ? "0 8px 24px rgba(0,0,0,0.15)"
+            : isSelectedForShip
+            ? "0 4px 16px rgba(34,197,94,0.3)"
             : selectedStoryId === story.id
             ? "0 4px 12px rgba(0,0,0,0.1)"
             : isHighPriority
             ? "0 2px 8px rgba(239,68,68,0.3)"
             : "0 1px 4px rgba(0,0,0,0.06)",
           transition: isDragging ? "transform 0.1s, box-shadow 0.1s" : "all 0.25s ease",
+          pointerEvents: isShipped ? "none" : "auto",
         }}
-        onMouseDown={(e) => handleMouseDown(e, story.id)}
+        onMouseDown={(e: React.MouseEvent) => handleMouseDown(e, story.id)}
         onMouseEnter={() => !draggingId && setHoveredStory(story.id)}
         onMouseLeave={() => setHoveredStory(null)}
       >
-        {isHighPriority && (
+        {isHighPriority && !selectionMode && (
           <div
             className="absolute inset-0 rounded-xl animate-ping opacity-20"
             style={{ backgroundColor: story.priority === "critical" ? "#ef4444" : "#f97316" }}
@@ -386,17 +411,22 @@ export function MatrixView() {
         <div
           className={`w-full h-full rounded-xl flex items-center justify-center border-2 transition-colors relative ${
             epicColor ? "" : "bg-slate-50 border-slate-300"
-          } ${selectedStoryId === story.id ? "ring-2 ring-foreground ring-offset-2" : ""}
-          ${isHighPriority ? "ring-2 ring-offset-1" : ""}`}
+          } ${isSelectedForShip ? "ring-2 ring-green-500 ring-offset-2" : selectedStoryId === story.id && !selectionMode ? "ring-2 ring-foreground ring-offset-2" : ""}
+          ${isHighPriority && !selectionMode ? "ring-2 ring-offset-1" : ""}`}
           style={{
             ...(epicColor ? { backgroundColor: `${epicColor}18`, borderColor: epicColor } : {}),
-            ...(isHighPriority ? { ringColor: story.priority === "critical" ? "#ef4444" : "#f97316" } : {}),
+            ...(isHighPriority && !selectionMode ? { ringColor: story.priority === "critical" ? "#ef4444" : "#f97316" } : {}),
+            ...(isSelectedForShip ? { borderColor: "#22c55e" } : {}),
           }}
         >
-          <span className="text-[10px] font-bold leading-none" style={{ color: accentColor }}>
-            {story.storyNumber ? `US-${story.storyNumber}` : "US"}
-          </span>
-          {isHighPriority && (
+          {isSelectedForShip ? (
+            <Check className="w-4 h-4 text-green-600" strokeWidth={3} />
+          ) : (
+            <span className="text-[10px] font-bold leading-none" style={{ color: accentColor }}>
+              {story.storyNumber ? `US-${story.storyNumber}` : "US"}
+            </span>
+          )}
+          {isHighPriority && !selectionMode && (
             <div
               className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white"
               style={{ backgroundColor: story.priority === "critical" ? "#ef4444" : "#f97316" }}
@@ -428,7 +458,7 @@ export function MatrixView() {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </motion.div>
     );
   };
 
@@ -442,7 +472,10 @@ export function MatrixView() {
             Matrice Effort / Impact
           </h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            {filteredStories.length} / {stories.length} US &middot; Glissez verticalement pour ajuster l&apos;impact
+            {selectionMode
+              ? `${selectedForShip.size} sélectionnée${selectedForShip.size > 1 ? "s" : ""} · Cliquez pour sélectionner les US à shipper`
+              : `${filteredStories.length} / ${stories.length} US · Glissez verticalement pour ajuster l'impact`
+            }
           </p>
         </div>
         <div className="flex items-center gap-1">

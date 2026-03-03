@@ -141,6 +141,22 @@ interface AppState {
   setSelectedStoryId: (id: string | null) => void;
   selectStoryForEditing: (id: string | null) => void;
 
+  // Ship multi-select
+  selectedForShip: Set<string>;
+  toggleShipSelection: (id: string) => void;
+  clearShipSelection: () => void;
+
+  // Shipped stories tracking
+  shippedStoryIds: Set<string>;
+  shipSelectedStories: () => void;
+
+  // Container override (toggle full-ai ↔ engineer-ai)
+  moveStoryBetweenModes: (id: string) => void;
+
+  // Ship detail panel
+  shipDetailStoryId: string | null;
+  setShipDetailStoryId: (id: string | null) => void;
+
   // Shared filters (Prioritize & Ship phases)
   filterEpic: string;
   filterStatus: string;
@@ -639,6 +655,47 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  // Ship multi-select
+  selectedForShip: new Set<string>(),
+  toggleShipSelection: (id) => {
+    set((state) => {
+      const next = new Set(state.selectedForShip);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return { selectedForShip: next };
+    });
+  },
+  clearShipSelection: () => set({ selectedForShip: new Set<string>() }),
+
+  // Shipped stories tracking
+  shippedStoryIds: new Set<string>(),
+  shipSelectedStories: () => {
+    const state = get();
+    const next = new Set(state.shippedStoryIds);
+    state.selectedForShip.forEach((id) => next.add(id));
+    set({ shippedStoryIds: next, selectedForShip: new Set<string>() });
+  },
+
+  // Container override
+  moveStoryBetweenModes: (id) => {
+    const state = get();
+    const story = state.stories.find((s) => s.id === id);
+    if (!story) return;
+    const newMode = story.productionMode === "full-ai" ? "engineer-ai" : "full-ai";
+    set((s) => ({
+      stories: s.stories.map((st) =>
+        st.id === id ? { ...st, productionMode: newMode } : st
+      ),
+    }));
+    if (state._persistUpdate) {
+      state._persistUpdate(id, { productionMode: newMode }).catch(console.error);
+    }
+  },
+
+  // Ship detail panel
+  shipDetailStoryId: null,
+  setShipDetailStoryId: (id) => set({ shipDetailStoryId: id }),
+
   // Shared filters (Prioritize & Ship)
   filterEpic: "all",
   filterStatus: "all",
@@ -690,6 +747,9 @@ export const useStore = create<AppState>((set, get) => ({
       rightPanelFullscreen: false,
       viewMode: "live-tagging",
       selectedStoryId: null,
+      selectedForShip: new Set<string>(),
+      shippedStoryIds: new Set<string>(),
+      shipDetailStoryId: null,
       filterEpic: "all",
       filterStatus: "all",
       _persistMsgCreate: null,

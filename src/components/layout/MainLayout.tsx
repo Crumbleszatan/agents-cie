@@ -5,7 +5,7 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { CenterPreview } from "@/components/preview/CenterPreview";
 import { USPanel } from "@/components/us-panel/USPanel";
 import { MatrixView } from "@/components/matrix/MatrixView";
-import { ProductionView } from "@/components/production/ProductionView";
+import { ShipView } from "@/components/ship/ShipView";
 import { StoryListPanel } from "@/components/story-list/StoryListPanel";
 import { StoryDetailPanel } from "@/components/story-detail/StoryDetailPanel";
 import { StorySyncProvider } from "@/components/providers/StorySyncProvider";
@@ -67,8 +67,6 @@ export function MainLayout() {
         return <CenterPreview />;
       case "prioritize":
         return <MatrixView />;
-      case "ship":
-        return <ProductionView />;
       default:
         return <CenterPreview />;
     }
@@ -78,6 +76,21 @@ export function MainLayout() {
   const showRightPanel = !centerPanelFullscreen;
   // Show center panel unless right panel is in fullscreen
   const showCenterPanel = !rightPanelFullscreen;
+
+  // Ship phase uses its own full-width layout
+  if (appPhase === "ship") {
+    return (
+      <div className="h-full flex flex-col bg-[#fafafa]">
+        <TopBar />
+        <StorySyncProvider />
+        <ChatSyncProvider />
+        <EpicSyncProvider />
+        <div className="flex-1 overflow-hidden">
+          <ShipView />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-[#fafafa]">
