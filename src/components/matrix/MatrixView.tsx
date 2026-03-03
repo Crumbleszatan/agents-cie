@@ -464,13 +464,14 @@ export function MatrixView() {
           >
             <ZoomOut className="w-3.5 h-3.5" />
           </button>
-          {zoom !== 1 && (
+          {(zoom !== 1 || panOffset.x !== 0 || panOffset.y !== 0) && (
             <button
               onClick={handleResetZoom}
-              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-              title="R\u00E9initialiser le zoom"
+              className="ml-1 px-2 py-1 rounded-lg bg-foreground/[0.06] hover:bg-foreground/[0.12] transition-colors text-muted-foreground hover:text-foreground text-[10px] font-medium flex items-center gap-1"
+              title="Revenir à la vue initiale"
             >
-              <Maximize2 className="w-3.5 h-3.5" />
+              <Maximize2 className="w-3 h-3" />
+              100%
             </button>
           )}
           <div className="w-px h-4 bg-border mx-1" />
