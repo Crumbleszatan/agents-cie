@@ -266,9 +266,9 @@ export function MatrixView() {
         dragRef.current.y = newY;
         const el = dotRefs.current.get(storyId);
         if (el) {
-          // Position in LOCAL coords (pre-zoom) — use matrixSize, not rect.height
-          const topPx = ((100 - newY) / 100) * matrixSize - DOT_SIZE / 2;
-          el.style.top = `${topPx}px`;
+          // Set as percentage — matches the React render approach
+          // translate(-50%,-50%) in CSS handles centering
+          el.style.top = `${100 - newY}%`;
         }
       };
 
@@ -338,12 +338,13 @@ export function MatrixView() {
   // ─── Render a single story dot ───
   const renderDot = (story: typeof filteredStories[0]) => {
     const pos = story.matrixPosition || { x: 50, y: 50 };
-    const left = (pos.x / 100) * matrixSize - DOT_SIZE / 2;
-    const top = ((100 - pos.y) / 100) * matrixSize - DOT_SIZE / 2;
     const epicColor = getEpicColor(story.epicId);
     const isHighPriority = story.priority === "high" || story.priority === "critical";
     const accentColor = epicColor || "#64748b"; // neutral slate when no epic
     const isDragging = draggingId === story.id;
+
+    // Scale transform for selection/drag feedback + translate(-50%,-50%) to center on position
+    const dotScale = isDragging ? 1.2 : selectedStoryId === story.id ? 1.1 : 1;
 
     return (
       <div
@@ -357,11 +358,11 @@ export function MatrixView() {
           isDragging ? "z-30 cursor-grabbing" : "z-20 cursor-ns-resize"
         }`}
         style={{
-          left,
-          top,
+          left: `${pos.x}%`,
+          top: `${100 - pos.y}%`,
           width: DOT_SIZE,
           height: DOT_SIZE,
-          transform: isDragging ? "scale(1.2)" : selectedStoryId === story.id ? "scale(1.1)" : "scale(1)",
+          transform: `translate(-50%, -50%) scale(${dotScale})`,
           boxShadow: isDragging
             ? "0 8px 24px rgba(0,0,0,0.15)"
             : selectedStoryId === story.id
@@ -537,11 +538,9 @@ export function MatrixView() {
         <div
           className="relative"
           style={{
-            width: matrixSize,
-            height: matrixSize,
-            transform: `scale(${zoom}) translate(${panOffset.x / zoom}px, ${panOffset.y / zoom}px)`,
-            transformOrigin: "center center",
-            transition: draggingId ? "none" : "transform 0.08s ease-out",
+            width: matrixSize * zoom,
+            height: matrixSize * zoom,
+            transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
           }}
         >
           {/* Quadrant backgrounds */}
