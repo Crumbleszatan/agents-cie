@@ -355,8 +355,8 @@ export function MatrixView() {
           else dotRefs.current.delete(story.id);
         }}
         className={`absolute select-none ${
-          isDragging ? "z-30 cursor-grabbing" : "z-20 cursor-ns-resize"
-        }`}
+          isDragging ? "z-40 cursor-grabbing" : selectedStoryId === story.id ? "z-30" : "z-20"
+        } cursor-ns-resize`}
         style={{
           left: `${pos.x}%`,
           top: `${100 - pos.y}%`,
