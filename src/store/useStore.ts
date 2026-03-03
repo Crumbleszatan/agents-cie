@@ -149,6 +149,7 @@ interface AppState {
   // Shipped stories tracking
   shippedStoryIds: Set<string>;
   shipSelectedStories: () => void;
+  unshipStory: (id: string) => void;
 
   // Container override (toggle full-ai ↔ engineer-ai)
   moveStoryBetweenModes: (id: string) => void;
@@ -674,6 +675,16 @@ export const useStore = create<AppState>((set, get) => ({
     const next = new Set(state.shippedStoryIds);
     state.selectedForShip.forEach((id) => next.add(id));
     set({ shippedStoryIds: next, selectedForShip: new Set<string>() });
+  },
+  unshipStory: (id) => {
+    set((state) => {
+      const next = new Set(state.shippedStoryIds);
+      next.delete(id);
+      return {
+        shippedStoryIds: next,
+        shipDetailStoryId: state.shipDetailStoryId === id ? null : state.shipDetailStoryId,
+      };
+    });
   },
 
   // Container override

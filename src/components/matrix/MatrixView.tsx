@@ -150,29 +150,38 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
     if (!el) return;
     const handler = (e: WheelEvent) => {
       e.preventDefault();
-      const rect = el.getBoundingClientRect();
-      // Mouse position relative to container center
-      const mx = e.clientX - rect.left - rect.width / 2;
-      const my = e.clientY - rect.top - rect.height / 2;
 
-      const oldZoom = zoomTargetRef.current;
-      const delta = e.deltaY > 0 ? -0.06 : 0.06;
-      const newZoom = Math.max(0.5, Math.min(10, oldZoom + delta));
-      zoomTargetRef.current = newZoom;
+      // Pinch zoom (ctrlKey or metaKey) always zooms
+      const isPinchZoom = e.ctrlKey || e.metaKey;
 
-      // Adjust pan so the world point under cursor stays fixed
-      // Screen pos = zoom * worldPos + panOffset
-      // worldPos = (screenPos - panOffset) / zoom
-      // We want: newZoom * worldPos + newPan = screenPos (same screen pos)
-      // => newPan = screenPos - newZoom * worldPos
-      //          = screenPos - newZoom * (screenPos - oldPan) / oldZoom
-      const oldPan = panTargetRef.current;
-      panTargetRef.current = {
-        x: mx - (newZoom / oldZoom) * (mx - oldPan.x),
-        y: my - (newZoom / oldZoom) * (my - oldPan.y),
-      };
+      if (isPinchZoom || zoomRef.current <= 1) {
+        // Zoom towards cursor
+        const rect = el.getBoundingClientRect();
+        const mx = e.clientX - rect.left - rect.width / 2;
+        const my = e.clientY - rect.top - rect.height / 2;
 
-      startZoomAnimation();
+        const oldZoom = zoomTargetRef.current;
+        const delta = e.deltaY > 0 ? -0.06 : 0.06;
+        const newZoom = Math.max(0.5, Math.min(10, oldZoom + delta));
+        zoomTargetRef.current = newZoom;
+
+        const oldPan = panTargetRef.current;
+        panTargetRef.current = {
+          x: mx - (newZoom / oldZoom) * (mx - oldPan.x),
+          y: my - (newZoom / oldZoom) * (my - oldPan.y),
+        };
+        startZoomAnimation();
+      } else {
+        // When zoomed in: scroll to pan (vertical + horizontal)
+        const panSpeed = 1.5;
+        const newPan = {
+          x: panOffsetRef.current.x - e.deltaX * panSpeed,
+          y: panOffsetRef.current.y - e.deltaY * panSpeed,
+        };
+        panOffsetRef.current = newPan;
+        panTargetRef.current = newPan;
+        setPanOffset(newPan);
+      }
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => {
@@ -364,7 +373,7 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
     const isSelectedForShip = selectionMode && selectedForShip.has(story.id);
 
     // Scale transform for selection/drag feedback + translate(-50%,-50%) to center on position
-    const dotScale = isDragging ? 1.2 : isSelectedForShip ? 1.15 : selectedStoryId === story.id ? 1.1 : 1;
+    const dotScale = isDragging ? 1.2 : isSelectedForShip ? 1.05 : selectedStoryId === story.id ? 1.1 : 1;
 
     return (
       <motion.div
@@ -388,7 +397,7 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
           boxShadow: isDragging
             ? "0 8px 24px rgba(0,0,0,0.15)"
             : isSelectedForShip
-            ? "0 4px 16px rgba(34,197,94,0.3)"
+            ? "0 2px 8px rgba(0,0,0,0.12)"
             : selectedStoryId === story.id
             ? "0 4px 12px rgba(0,0,0,0.1)"
             : isHighPriority
@@ -411,20 +420,22 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
         <div
           className={`w-full h-full rounded-xl flex items-center justify-center border-2 transition-colors relative ${
             epicColor ? "" : "bg-slate-50 border-slate-300"
-          } ${isSelectedForShip ? "ring-2 ring-green-500 ring-offset-2" : selectedStoryId === story.id && !selectionMode ? "ring-2 ring-foreground ring-offset-2" : ""}
+          } ${isSelectedForShip ? "ring-2 ring-foreground/40 ring-offset-1" : selectedStoryId === story.id && !selectionMode ? "ring-2 ring-foreground ring-offset-2" : ""}
           ${isHighPriority && !selectionMode ? "ring-2 ring-offset-1" : ""}`}
           style={{
             ...(epicColor ? { backgroundColor: `${epicColor}18`, borderColor: epicColor } : {}),
             ...(isHighPriority && !selectionMode ? { ringColor: story.priority === "critical" ? "#ef4444" : "#f97316" } : {}),
-            ...(isSelectedForShip ? { borderColor: "#22c55e" } : {}),
+            ...(isSelectedForShip && !epicColor ? { backgroundColor: "#f8fafc", borderColor: "#1e293b" } : {}),
+            ...(isSelectedForShip && epicColor ? { borderColor: epicColor } : {}),
           }}
         >
-          {isSelectedForShip ? (
-            <Check className="w-4 h-4 text-green-600" strokeWidth={3} />
-          ) : (
-            <span className="text-[10px] font-bold leading-none" style={{ color: accentColor }}>
-              {story.storyNumber ? `US-${story.storyNumber}` : "US"}
-            </span>
+          <span className="text-[10px] font-bold leading-none" style={{ color: accentColor }}>
+            {story.storyNumber ? `US-${story.storyNumber}` : "US"}
+          </span>
+          {isSelectedForShip && (
+            <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-foreground flex items-center justify-center">
+              <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+            </div>
           )}
           {isHighPriority && !selectionMode && (
             <div

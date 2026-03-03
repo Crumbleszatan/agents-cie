@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bot, Wrench, GripVertical } from "lucide-react";
+import { Bot, Wrench, GripVertical, X, Zap, Users } from "lucide-react";
 import type { UserStory } from "@/types";
 
 interface ShipContainerProps {
@@ -11,6 +11,8 @@ interface ShipContainerProps {
   stories: UserStory[];
   onStoryClick: (id: string) => void;
   onDrop: (storyId: string) => void;
+  onUnship: (storyId: string) => void;
+  onAction?: () => void;
   selectedDetailId: string | null;
 }
 
@@ -20,6 +22,8 @@ export function ShipContainer({
   stories,
   onStoryClick,
   onDrop,
+  onUnship,
+  onAction,
   selectedDetailId,
 }: ShipContainerProps) {
   const [isDragOver, setIsDragOver] = useState(false);
@@ -81,6 +85,29 @@ export function ShipContainer({
             {stories.length} US
           </p>
         </div>
+        {/* Action button */}
+        {stories.length > 0 && onAction && (
+          <button
+            onClick={onAction}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+              isViolet
+                ? "bg-violet-600 text-white hover:bg-violet-700"
+                : "bg-amber-600 text-white hover:bg-amber-700"
+            }`}
+          >
+            {isViolet ? (
+              <>
+                <Zap className="w-3 h-3" />
+                Instant Build
+              </>
+            ) : (
+              <>
+                <Users className="w-3 h-3" />
+                Sent to Team
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Pills grid */}
@@ -94,14 +121,19 @@ export function ShipContainer({
         ) : (
           <div className="flex flex-wrap gap-2">
             <AnimatePresence mode="popLayout">
-              {stories.map((story) => (
+              {stories.map((story, i) => (
                 <motion.div
                   key={story.id}
                   layoutId={`ship-dot-${story.id}`}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                  initial={{ opacity: 0, scale: 0.6, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.8 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 200,
+                    damping: 20,
+                    delay: i * 0.06,
+                  }}
                 >
                   <div
                     draggable
@@ -116,7 +148,7 @@ export function ShipContainer({
                     }`}
                   >
                     <GripVertical className="w-3 h-3 text-muted-foreground/30 group-hover:text-muted-foreground/60 flex-shrink-0 cursor-grab" />
-                    <span className="text-[10px] font-semibold text-muted-foreground">
+                    <span className={`text-[10px] font-semibold ${isViolet ? "text-violet-500" : "text-amber-500"}`}>
                       {story.storyNumber ? `US-${story.storyNumber}` : "US"}
                     </span>
                     <span className="text-[11px] font-medium truncate max-w-[120px]">
@@ -125,6 +157,17 @@ export function ShipContainer({
                     <span className="text-[9px] text-muted-foreground flex-shrink-0">
                       {story.storyPoints || "?"}pts
                     </span>
+                    {/* Remove from container */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUnship(story.id);
+                      }}
+                      className="ml-auto w-4 h-4 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-100 transition-all flex-shrink-0"
+                      title="Retirer du container"
+                    >
+                      <X className="w-2.5 h-2.5 text-red-400 hover:text-red-600" />
+                    </button>
                   </div>
                 </motion.div>
               ))}

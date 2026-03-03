@@ -14,6 +14,7 @@ export function ShipView() {
   const shippedStoryIds = useStore((s) => s.shippedStoryIds);
   const shipSelectedStories = useStore((s) => s.shipSelectedStories);
   const moveStoryBetweenModes = useStore((s) => s.moveStoryBetweenModes);
+  const unshipStory = useStore((s) => s.unshipStory);
   const shipDetailStoryId = useStore((s) => s.shipDetailStoryId);
   const setShipDetailStoryId = useStore((s) => s.setShipDetailStoryId);
   const selectStoryForEditing = useStore((s) => s.selectStoryForEditing);
@@ -28,6 +29,7 @@ export function ShipView() {
   }, [stories, shippedStoryIds]);
 
   const selectionCount = selectedForShip.size;
+  const hasShipped = shippedStoryIds.size > 0;
 
   const handleShip = () => {
     shipSelectedStories();
@@ -35,7 +37,6 @@ export function ShipView() {
 
   const handleStoryClick = (id: string) => {
     setShipDetailStoryId(id);
-    // Also load story into currentStory for the detail panel
     selectStoryForEditing(id);
   };
 
@@ -43,7 +44,9 @@ export function ShipView() {
     moveStoryBetweenModes(storyId);
   };
 
-  const showDetail = !!shipDetailStoryId;
+  const handleUnship = (storyId: string) => {
+    unshipStory(storyId);
+  };
 
   return (
     <LayoutGroup>
@@ -59,7 +62,7 @@ export function ShipView() {
                 initial={{ opacity: 0, y: 20, scale: 0.9 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 20, scale: 0.9 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                transition={{ type: "spring", stiffness: 300, damping: 22 }}
                 onClick={handleShip}
                 className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 bg-foreground text-white rounded-full px-6 py-3 shadow-lg hover:shadow-xl transition-shadow flex items-center gap-2 text-sm font-semibold"
               >
@@ -70,59 +73,43 @@ export function ShipView() {
           </AnimatePresence>
         </div>
 
-        {/* Right: Containers + optional detail */}
-        <div className={`flex flex-col gap-2 relative ${showDetail ? "w-[50%]" : "w-[40%]"}`}>
-          {showDetail ? (
-            /* Split: containers top, detail bottom */
-            <>
-              <div className="flex-1 flex flex-col gap-2 min-h-0">
-                <ShipContainer
-                  title="Instant Shipped"
-                  mode="full-ai"
-                  stories={fullAiShipped}
-                  onStoryClick={handleStoryClick}
-                  onDrop={handleDrop}
-                  selectedDetailId={shipDetailStoryId}
-                />
-                <ShipContainer
-                  title="Human Powered"
-                  mode="engineer-ai"
-                  stories={engineerShipped}
-                  onStoryClick={handleStoryClick}
-                  onDrop={handleDrop}
-                  selectedDetailId={shipDetailStoryId}
-                />
-              </div>
-              <div className="h-[45%] panel shadow-soft overflow-hidden flex flex-col relative">
-                <StoryDetailPanel />
-              </div>
-            </>
-          ) : (
-            /* Full height: two containers stacked */
-            <>
-              <ShipContainer
-                title="Instant Shipped"
-                mode="full-ai"
-                stories={fullAiShipped}
-                onStoryClick={handleStoryClick}
-                onDrop={handleDrop}
-                selectedDetailId={shipDetailStoryId}
-              />
-              <ShipContainer
-                title="Human Powered"
-                mode="engineer-ai"
-                stories={engineerShipped}
-                onStoryClick={handleStoryClick}
-                onDrop={handleDrop}
-                selectedDetailId={shipDetailStoryId}
-              />
-            </>
+        {/* Right: Containers + detail panel */}
+        <div className="w-[45%] flex flex-col gap-2">
+          {/* Top: containers */}
+          <div className={`flex flex-col gap-2 ${hasShipped && shipDetailStoryId ? "h-[55%]" : "flex-1"}`}>
+            <ShipContainer
+              title="Instant Shipped"
+              mode="full-ai"
+              stories={fullAiShipped}
+              onStoryClick={handleStoryClick}
+              onDrop={handleDrop}
+              onUnship={handleUnship}
+              onAction={() => {/* TODO: trigger instant build */}}
+              selectedDetailId={shipDetailStoryId}
+            />
+            <ShipContainer
+              title="Human Powered"
+              mode="engineer-ai"
+              stories={engineerShipped}
+              onStoryClick={handleStoryClick}
+              onDrop={handleDrop}
+              onUnship={handleUnship}
+              onAction={() => {/* TODO: send to team */}}
+              selectedDetailId={shipDetailStoryId}
+            />
+          </div>
+
+          {/* Bottom: detail panel (always visible) */}
+          {hasShipped && shipDetailStoryId && (
+            <div className="h-[45%] panel shadow-soft overflow-hidden flex flex-col">
+              <StoryDetailPanel />
+            </div>
           )}
 
-          {/* Empty state when nothing shipped yet */}
-          {shippedStoryIds.size === 0 && (
+          {/* Empty state overlay */}
+          {!hasShipped && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="text-center pointer-events-none">
+              <div className="text-center">
                 <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-2">
                   <Rocket className="w-6 h-6 text-muted-foreground/40" />
                 </div>
