@@ -15,6 +15,7 @@ import {
   ZoomOut,
   Maximize2,
   Check,
+  Filter,
 } from "lucide-react";
 
 const DOT_SIZE = 48;
@@ -33,6 +34,8 @@ export function MatrixView({ selectionMode = false, departingIds }: MatrixViewPr
   const selectStoryForEditing = useStore((s) => s.selectStoryForEditing);
   const filterEpic = useStore((s) => s.filterEpic);
   const filterStatus = useStore((s) => s.filterStatus);
+  const setFilterEpic = useStore((s) => s.setFilterEpic);
+  const setFilterStatus = useStore((s) => s.setFilterStatus);
 
   // Ship selection state
   const selectedForShip = useStore((s) => s.selectedForShip);
@@ -537,6 +540,43 @@ export function MatrixView({ selectionMode = false, departingIds }: MatrixViewPr
           </p>
         </div>
         <div className="flex items-center gap-1">
+          {/* Filters — visible in both modes */}
+          {epics.length > 0 && (
+            <select
+              value={filterEpic}
+              onChange={(e) => setFilterEpic(e.target.value)}
+              className="text-[10px] font-medium px-2 py-1 rounded-lg bg-muted border-0 outline-none cursor-pointer text-foreground max-w-[120px]"
+            >
+              <option value="all">Tous les Epics</option>
+              {epics.map((epic) => (
+                <option key={epic.id} value={epic.id}>
+                  {epic.title}
+                </option>
+              ))}
+            </select>
+          )}
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="text-[10px] font-medium px-2 py-1 rounded-lg bg-muted border-0 outline-none cursor-pointer text-foreground max-w-[110px]"
+          >
+            <option value="all">Tous statuts</option>
+            <option value="backlog">Backlog</option>
+            <option value="planned">Planned</option>
+            <option value="in-progress">In Progress</option>
+            <option value="review">Review</option>
+            <option value="done">Done</option>
+          </select>
+          {(filterEpic !== "all" || filterStatus !== "all") && (
+            <button
+              onClick={() => { setFilterEpic("all"); setFilterStatus("all"); }}
+              className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+              title="Réinitialiser les filtres"
+            >
+              <Filter className="w-3 h-3" />
+            </button>
+          )}
+          <div className="w-px h-4 bg-border mx-0.5" />
           {/* Zoom controls */}
           <button
             onClick={() => adjustZoom(0.2)}

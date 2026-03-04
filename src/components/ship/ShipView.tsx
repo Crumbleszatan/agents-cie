@@ -8,6 +8,7 @@ import { Send } from "lucide-react";
 import { MatrixView } from "@/components/matrix/MatrixView";
 import { ShipContainer } from "@/components/ship/ShipContainer";
 import { StoryDetailPanel } from "@/components/story-detail/StoryDetailPanel";
+import { InstantShipModal } from "@/components/ship/InstantShipModal";
 
 interface FlyingStory {
   id: string;
@@ -35,6 +36,9 @@ export function ShipView() {
   // Refs to containers for target position
   const fullAiContainerRef = useRef<HTMLDivElement>(null);
   const engineerContainerRef = useRef<HTMLDivElement>(null);
+
+  // Instant Ship modal state
+  const [showInstantModal, setShowInstantModal] = useState(false);
 
   // Animation state
   const [flyingStories, setFlyingStories] = useState<FlyingStory[]>([]);
@@ -135,6 +139,12 @@ export function ShipView() {
     unshipStory(storyId);
   };
 
+  const handleInstantBuildConfirm = (buildDate: string, buildTime: string, mepDate: string) => {
+    // TODO: persist the planned release with these dates
+    console.log("Instant Release planned:", { buildDate, buildTime, mepDate, stories: fullAiShipped.length });
+    setShowInstantModal(false);
+  };
+
   const showDetail = hasShipped && shipDetailStoryId;
 
   return (
@@ -189,7 +199,7 @@ export function ShipView() {
               onStoryClick={handleStoryClick}
               onDrop={handleDrop}
               onUnship={handleUnship}
-              onAction={() => {/* TODO: trigger instant build */}}
+              onAction={() => setShowInstantModal(true)}
               selectedDetailId={shipDetailStoryId}
             />
           </div>
@@ -208,6 +218,15 @@ export function ShipView() {
           </div>
         </div>
       </div>
+
+      {/* ─── Instant Ship Modal ─── */}
+      {showInstantModal && (
+        <InstantShipModal
+          stories={fullAiShipped}
+          onConfirm={handleInstantBuildConfirm}
+          onClose={() => setShowInstantModal(false)}
+        />
+      )}
 
       {/* ─── Flying overlay: arc balistique animation ─── */}
       {typeof document !== "undefined" &&
