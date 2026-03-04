@@ -2,6 +2,7 @@
 
 import { useStore } from "@/store/useStore";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap,
@@ -41,6 +42,7 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [hoveredStory, setHoveredStory] = useState<string | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const [matrixSize, setMatrixSize] = useState(500);
 
   // ─── Zoom state ───
@@ -240,6 +242,8 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
         if (!shippedStoryIds.has(storyId)) {
           toggleShipSelection(storyId);
         }
+        // Always bring to foreground + show in detail panel
+        selectStoryForEditing(storyId);
         return;
       }
 
@@ -372,8 +376,8 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
     const isShipped = selectionMode && shippedStoryIds.has(story.id);
     const isSelectedForShip = selectionMode && selectedForShip.has(story.id);
 
-    // Scale transform for selection/drag feedback + translate(-50%,-50%) to center on position
-    const dotScale = isDragging ? 1.2 : isSelectedForShip ? 1.05 : selectedStoryId === story.id ? 1.1 : 1;
+    // Scale transform for drag feedback only — no scale for selection (prevents position shift)
+    const dotScale = isDragging ? 1.2 : selectedStoryId === story.id && !selectionMode ? 1.1 : 1;
 
     return (
       <motion.div
@@ -384,8 +388,8 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
           if (el) dotRefs.current.set(story.id, el);
           else dotRefs.current.delete(story.id);
         }}
-        className={`absolute select-none ${
-          isDragging ? "z-40 cursor-grabbing" : selectedStoryId === story.id || isSelectedForShip ? "z-30" : "z-20"
+        className={`absolute select-none rounded-xl overflow-hidden ${
+          isDragging ? "z-40 cursor-grabbing" : selectedStoryId === story.id ? "z-[35]" : isSelectedForShip ? "z-30" : "z-20"
         } ${selectionMode ? (isShipped ? "cursor-default" : "cursor-pointer") : "cursor-ns-resize"}`}
         style={{
           left: `${pos.x}%`,
@@ -403,12 +407,22 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
             : isHighPriority
             ? "0 2px 8px rgba(239,68,68,0.3)"
             : "0 1px 4px rgba(0,0,0,0.06)",
-          transition: isDragging ? "transform 0.1s, box-shadow 0.1s" : "all 0.25s ease",
+          borderRadius: 12,
+          transition: isDragging ? "box-shadow 0.1s" : "box-shadow 0.25s ease, opacity 0.25s ease",
           pointerEvents: isShipped ? "none" : "auto",
         }}
         onMouseDown={(e: React.MouseEvent) => handleMouseDown(e, story.id)}
-        onMouseEnter={() => !draggingId && setHoveredStory(story.id)}
-        onMouseLeave={() => setHoveredStory(null)}
+        onMouseEnter={() => {
+          if (!draggingId) {
+            setHoveredStory(story.id);
+            const dotEl = dotRefs.current.get(story.id);
+            if (dotEl) {
+              const rect = dotEl.getBoundingClientRect();
+              setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
+            }
+          }
+        }}
+        onMouseLeave={() => { setHoveredStory(null); setTooltipPos(null); }}
       >
         {isHighPriority && !selectionMode && (
           <div
@@ -445,30 +459,6 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
           )}
         </div>
 
-        {/* Tooltip */}
-        <AnimatePresence>
-          {hoveredStory === story.id && !isDragging && (
-            <motion.div
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="absolute left-1/2 -translate-x-1/2 -top-2 -translate-y-full bg-foreground text-white rounded-lg px-3 py-2 shadow-elevated z-50 whitespace-nowrap pointer-events-none"
-            >
-              <p className="text-xs font-medium">
-                {story.storyNumber ? `US-${story.storyNumber} \u00B7 ` : ""}{story.title || "Sans titre"}
-              </p>
-              <p className="text-[10px] text-white/60 mt-0.5">
-                {story.storyPoints || "?"} pts &middot; {getQuadrantInfo(getQuadrant(pos.x, pos.y)).label}
-                {story.epicId && epics.find((e) => e.id === story.epicId) && (
-                  <> &middot; {epics.find((e) => e.id === story.epicId)!.title}</>
-                )}
-              </p>
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-0 translate-y-full">
-                <div className="w-2 h-2 bg-foreground rotate-45 -translate-y-1" />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </motion.div>
     );
   };
@@ -518,14 +508,18 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
               100%
             </button>
           )}
-          <div className="w-px h-4 bg-border mx-1" />
-          <button
-            onClick={handleAutoPlace}
-            className="btn-secondary flex items-center gap-1.5 text-xs"
-          >
-            <RotateCcw className="w-3 h-3" />
-            Auto-placer
-          </button>
+          {!selectionMode && (
+            <>
+              <div className="w-px h-4 bg-border mx-1" />
+              <button
+                onClick={handleAutoPlace}
+                className="btn-secondary flex items-center gap-1.5 text-xs"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Auto-placer
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -641,6 +635,45 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
           </div>
         </div>
       )}
+
+      {/* Portal tooltip — rendered to body to avoid overflow-hidden clipping */}
+      {typeof document !== "undefined" &&
+        hoveredStory &&
+        tooltipPos &&
+        !draggingId &&
+        (() => {
+          const hStory = filteredStories.find((s) => s.id === hoveredStory);
+          if (!hStory) return null;
+          const pos = hStory.matrixPosition || { x: 50, y: 50 };
+          return createPortal(
+            <div
+              className="fixed z-[9999] pointer-events-none"
+              style={{
+                left: tooltipPos.x,
+                top: tooltipPos.y - 8,
+                transform: "translate(-50%, -100%)",
+              }}
+            >
+              <div className="bg-foreground text-white rounded-lg px-3 py-2 shadow-elevated whitespace-nowrap">
+                <p className="text-xs font-medium">
+                  {hStory.storyNumber ? `US-${hStory.storyNumber} · ` : ""}
+                  {hStory.title || "Sans titre"}
+                </p>
+                <p className="text-[10px] text-white/60 mt-0.5">
+                  {hStory.storyPoints || "?"} pts · {getQuadrantInfo(getQuadrant(pos.x, pos.y)).label}
+                  {hStory.epicId &&
+                    epics.find((e) => e.id === hStory.epicId) && (
+                      <> · {epics.find((e) => e.id === hStory.epicId)!.title}</>
+                    )}
+                </p>
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-0 translate-y-full">
+                  <div className="w-2 h-2 bg-foreground rotate-45 -translate-y-1" />
+                </div>
+              </div>
+            </div>,
+            document.body
+          );
+        })()}
     </div>
   );
 }

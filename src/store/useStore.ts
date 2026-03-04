@@ -230,6 +230,9 @@ const defaultContext: ConversationContext = {
   currentFocus: "initial",
 };
 
+// Module-level debounce timer for auto-saving currentStory edits
+let _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
 export const useStore = create<AppState>((set, get) => ({
   // Project
   project: null,
@@ -241,10 +244,19 @@ export const useStore = create<AppState>((set, get) => ({
 
   // User Story
   currentStory: createDefaultStory(),
-  updateStory: (updates) =>
+  updateStory: (updates) => {
     set((state) => ({
       currentStory: { ...state.currentStory, ...updates },
-    })),
+    }));
+    // Debounced auto-save: persist 800ms after last edit
+    if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(() => {
+      const state = get();
+      if (state.currentStory.title) {
+        state.saveCurrentStory();
+      }
+    }, 800);
+  },
   addSubtask: (subtask) =>
     set((state) => ({
       currentStory: {
@@ -305,12 +317,18 @@ export const useStore = create<AppState>((set, get) => ({
   stories: [],
   addStory: (story) =>
     set((state) => ({ stories: [...state.stories, story] })),
-  updateStoryInList: (id, updates) =>
+  updateStoryInList: (id, updates) => {
     set((state) => ({
       stories: state.stories.map((s) =>
         s.id === id ? { ...s, ...updates } : s
       ),
-    })),
+    }));
+    // Persist to DB
+    const state = get();
+    if (state._persistUpdate) {
+      state._persistUpdate(id, updates).catch(console.error);
+    }
+  },
   removeStory: (id) => {
     set((state) => ({
       stories: state.stories.filter((s) => s.id !== id),

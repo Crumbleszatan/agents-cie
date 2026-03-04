@@ -3,7 +3,7 @@
 import { useStore } from "@/store/useStore";
 import { useMemo } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
-import { Rocket, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import { MatrixView } from "@/components/matrix/MatrixView";
 import { ShipContainer } from "@/components/ship/ShipContainer";
 import { StoryDetailPanel } from "@/components/story-detail/StoryDetailPanel";
@@ -106,19 +106,6 @@ export function ShipView() {
             </div>
           )}
 
-          {/* Empty state overlay */}
-          {!hasShipped && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="text-center">
-                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-2">
-                  <Rocket className="w-6 h-6 text-muted-foreground/40" />
-                </div>
-                <p className="text-xs text-muted-foreground/50">
-                  Sélectionnez des US dans la matrice puis cliquez Ship
-                </p>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </LayoutGroup>

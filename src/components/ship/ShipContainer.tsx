@@ -125,14 +125,14 @@ export function ShipContainer({
                 <motion.div
                   key={story.id}
                   layoutId={`ship-dot-${story.id}`}
-                  initial={{ opacity: 0, scale: 0.6, y: 10 }}
+                  initial={{ opacity: 0, scale: 0.3, y: 20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
+                  exit={{ opacity: 0, scale: 0.6, y: -8 }}
                   transition={{
                     type: "spring",
-                    stiffness: 200,
-                    damping: 20,
-                    delay: i * 0.06,
+                    stiffness: 100,
+                    damping: 14,
+                    delay: i * 0.1,
                   }}
                 >
                   <div
