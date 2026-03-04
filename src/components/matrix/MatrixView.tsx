@@ -371,9 +371,57 @@ export function MatrixView({ selectionMode = false, departingIds }: MatrixViewPr
     );
   };
 
+  // ─── Cluster detection: offset overlapping dots ───
+  const clusterOffsets = useMemo(() => {
+    const THRESHOLD = 3; // % — dots closer than this form a cluster
+    const SPREAD = 3.5; // % — radius of the circular spread
+
+    type Cluster = { cx: number; cy: number; ids: string[] };
+    const clusters: Cluster[] = [];
+    const assigned = new Set<string>();
+
+    for (const story of filteredStories) {
+      if (assigned.has(story.id)) continue;
+      const pos = story.matrixPosition || { x: 50, y: 50 };
+      const cluster: Cluster = { cx: pos.x, cy: pos.y, ids: [story.id] };
+      assigned.add(story.id);
+
+      for (const other of filteredStories) {
+        if (assigned.has(other.id)) continue;
+        const oPos = other.matrixPosition || { x: 50, y: 50 };
+        const dx = pos.x - oPos.x;
+        const dy = pos.y - oPos.y;
+        if (Math.sqrt(dx * dx + dy * dy) < THRESHOLD) {
+          cluster.ids.push(other.id);
+          assigned.add(other.id);
+        }
+      }
+      if (cluster.ids.length > 1) clusters.push(cluster);
+    }
+
+    const offsets: Record<string, { dx: number; dy: number; clusterSize: number }> = {};
+    for (const cluster of clusters) {
+      const n = cluster.ids.length;
+      const radius = n <= 3 ? SPREAD * 0.8 : SPREAD;
+      cluster.ids.forEach((id, i) => {
+        const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+        offsets[id] = {
+          dx: Math.cos(angle) * radius,
+          dy: Math.sin(angle) * radius,
+          clusterSize: n,
+        };
+      });
+    }
+    return offsets;
+  }, [filteredStories]);
+
   // ─── Render a single story dot ───
   const renderDot = (story: typeof filteredStories[0]) => {
-    const pos = story.matrixPosition || { x: 50, y: 50 };
+    const rawPos = story.matrixPosition || { x: 50, y: 50 };
+    const offset = clusterOffsets[story.id];
+    const pos = offset
+      ? { x: Math.max(2, Math.min(98, rawPos.x + offset.dx)), y: Math.max(2, Math.min(98, rawPos.y + offset.dy)) }
+      : rawPos;
     const epicColor = getEpicColor(story.epicId);
     const isHighPriority = story.priority === "high" || story.priority === "critical";
     const accentColor = epicColor || "#64748b"; // neutral slate when no epic
