@@ -178,9 +178,9 @@ export function ShipView() {
           </AnimatePresence>
         </div>
 
-        {/* Right: Containers (~25%) */}
-        <div className="w-[25%] flex flex-col gap-2 flex-shrink-0">
-          <div ref={fullAiContainerRef} className="flex-1 flex flex-col">
+        {/* Right: Containers (~25%) — each 50% height, scrollable */}
+        <div className="w-[25%] flex flex-col gap-2 flex-shrink-0 min-h-0 overflow-hidden">
+          <div ref={fullAiContainerRef} className="flex-1 flex flex-col min-h-0">
             <ShipContainer
               title="Instant Shipped"
               mode="full-ai"
@@ -193,7 +193,7 @@ export function ShipView() {
               selectedDetailId={shipDetailStoryId}
             />
           </div>
-          <div ref={engineerContainerRef} className="flex-1 flex flex-col">
+          <div ref={engineerContainerRef} className="flex-1 flex flex-col min-h-0">
             <ShipContainer
               title="Human Powered"
               mode="engineer-ai"

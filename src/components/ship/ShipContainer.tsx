@@ -119,7 +119,7 @@ export function ShipContainer({
 
   return (
     <div
-      className={`flex-1 rounded-xl border-2 transition-all flex flex-col overflow-hidden ${
+      className={`flex-1 min-h-0 rounded-xl border-2 transition-all flex flex-col overflow-hidden ${
         isDragOver
           ? isViolet
             ? "border-violet-400 bg-violet-50/50"
