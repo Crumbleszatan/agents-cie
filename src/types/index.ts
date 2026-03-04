@@ -170,7 +170,31 @@ export interface Release {
 }
 
 export type ViewMode = "live-tagging" | "ia-preview" | "architecture";
-export type AppPhase = "build" | "prioritize" | "ship";
+export type AppPhase = "build" | "prioritize" | "ship" | "release";
+
+// ─── Release Planning ───
+export interface ReleasePhaseSegment {
+  id: string;
+  name: string; // "Build" | "Review" | "Deploy" | "Prod" | "Testing" | "Recette" | "MEP"
+  startDate: string;
+  endDate: string;
+  durationDays: number;
+  status: "pending" | "in-progress" | "completed";
+  color: string;
+}
+
+export interface ReleaseTimeline {
+  id: string;
+  name: string;
+  storyIds: string[];
+  releaseType: "instant" | "human";
+  totalStoryPoints: number;
+  phases: ReleasePhaseSegment[];
+  startDate: string;
+  endDate: string;
+  status: "upcoming" | "in-progress" | "completed";
+  createdAt: string;
+}
 export type TrainingStatus = "not_started" | "in_progress" | "complete";
 
 // ─── Epic (group of related user stories) ───

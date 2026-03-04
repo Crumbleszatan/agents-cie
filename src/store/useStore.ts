@@ -14,7 +14,9 @@ import type {
   PinnedTag,
   DomModification,
   TrainingStatus,
+  ReleaseTimeline,
 } from "@/types";
+import { computeInstantPhases, computeHumanPhases } from "@/components/release/releaseUtils";
 
 function uuid() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -158,6 +160,14 @@ interface AppState {
   // Ship detail panel
   shipDetailStoryId: string | null;
   setShipDetailStoryId: (id: string | null) => void;
+
+  // Release timelines
+  releaseTimelines: ReleaseTimeline[];
+  createReleaseFromShipped: () => void;
+  updateReleaseTimeline: (id: string, updates: Partial<ReleaseTimeline>) => void;
+  removeReleaseTimeline: (id: string) => void;
+  expandedReleaseId: string | null;
+  setExpandedReleaseId: (id: string | null) => void;
 
   // Shared filters (Prioritize & Ship phases)
   filterEpic: string;
@@ -733,6 +743,87 @@ export const useStore = create<AppState>((set, get) => ({
   shipDetailStoryId: null,
   setShipDetailStoryId: (id) => set({ shipDetailStoryId: id }),
 
+  // Release timelines
+  releaseTimelines: [],
+  expandedReleaseId: null,
+  setExpandedReleaseId: (id) => set({ expandedReleaseId: id }),
+  createReleaseFromShipped: () => {
+    const state = get();
+    const shippedStories = state.stories.filter((s) => state.shippedStoryIds.has(s.id));
+    // Find stories not yet assigned to any existing release
+    const assignedIds = new Set(state.releaseTimelines.flatMap((r) => r.storyIds));
+    const unassigned = shippedStories.filter((s) => !assignedIds.has(s.id));
+    if (unassigned.length === 0) return;
+
+    const instantStories = unassigned.filter((s) => s.productionMode === "full-ai");
+    const humanStories = unassigned.filter((s) => s.productionMode === "engineer-ai");
+    const newReleases: ReleaseTimeline[] = [];
+
+    const existingInstant = state.releaseTimelines.filter((r) => r.releaseType === "instant");
+    const existingHuman = state.releaseTimelines.filter((r) => r.releaseType === "human");
+
+    if (instantStories.length > 0) {
+      const totalSP = instantStories.reduce((sum, s) => sum + (s.storyPoints || 0), 0);
+      const lastEnd = existingInstant.length > 0
+        ? new Date(existingInstant[existingInstant.length - 1].endDate)
+        : new Date();
+      const startDate = lastEnd > new Date() ? lastEnd : new Date();
+      const phases = computeInstantPhases(totalSP, startDate);
+      const num = existingInstant.length + 1;
+      newReleases.push({
+        id: uuid(),
+        name: `R-${num} Instant`,
+        storyIds: instantStories.map((s) => s.id),
+        releaseType: "instant",
+        totalStoryPoints: totalSP,
+        phases,
+        startDate: phases[0].startDate,
+        endDate: phases[phases.length - 1].endDate,
+        status: "upcoming",
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    if (humanStories.length > 0) {
+      const totalSP = humanStories.reduce((sum, s) => sum + (s.storyPoints || 0), 0);
+      const lastEnd = existingHuman.length > 0
+        ? new Date(existingHuman[existingHuman.length - 1].endDate)
+        : new Date();
+      const startDate = lastEnd > new Date() ? lastEnd : new Date();
+      const phases = computeHumanPhases(totalSP, startDate);
+      const num = existingHuman.length + 1;
+      newReleases.push({
+        id: uuid(),
+        name: `R-${num} Human`,
+        storyIds: humanStories.map((s) => s.id),
+        releaseType: "human",
+        totalStoryPoints: totalSP,
+        phases,
+        startDate: phases[0].startDate,
+        endDate: phases[phases.length - 1].endDate,
+        status: "upcoming",
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    if (newReleases.length > 0) {
+      set((s) => ({ releaseTimelines: [...s.releaseTimelines, ...newReleases] }));
+    }
+  },
+  updateReleaseTimeline: (id, updates) => {
+    set((state) => ({
+      releaseTimelines: state.releaseTimelines.map((r) =>
+        r.id === id ? { ...r, ...updates } : r
+      ),
+    }));
+  },
+  removeReleaseTimeline: (id) => {
+    set((state) => ({
+      releaseTimelines: state.releaseTimelines.filter((r) => r.id !== id),
+      expandedReleaseId: state.expandedReleaseId === id ? null : state.expandedReleaseId,
+    }));
+  },
+
   // Shared filters (Prioritize & Ship)
   filterEpic: "all",
   filterStatus: "all",
@@ -787,6 +878,8 @@ export const useStore = create<AppState>((set, get) => ({
       selectedForShip: new Set<string>(),
       shippedStoryIds: new Set<string>(),
       shipDetailStoryId: null,
+      releaseTimelines: [],
+      expandedReleaseId: null,
       filterEpic: "all",
       filterStatus: "all",
       _persistMsgCreate: null,

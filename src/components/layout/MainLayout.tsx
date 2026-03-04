@@ -6,6 +6,7 @@ import { CenterPreview } from "@/components/preview/CenterPreview";
 import { USPanel } from "@/components/us-panel/USPanel";
 import { MatrixView } from "@/components/matrix/MatrixView";
 import { ShipView } from "@/components/ship/ShipView";
+import { ReleaseView } from "@/components/release/ReleaseView";
 import { StoryListPanel } from "@/components/story-list/StoryListPanel";
 import { StoryDetailPanel } from "@/components/story-detail/StoryDetailPanel";
 import { StorySyncProvider } from "@/components/providers/StorySyncProvider";
@@ -76,6 +77,21 @@ export function MainLayout() {
   const showRightPanel = !centerPanelFullscreen;
   // Show center panel unless right panel is in fullscreen
   const showCenterPanel = !rightPanelFullscreen;
+
+  // Release phase uses its own full-width layout
+  if (appPhase === "release") {
+    return (
+      <div className="h-full flex flex-col bg-[#fafafa]">
+        <TopBar />
+        <StorySyncProvider />
+        <ChatSyncProvider />
+        <EpicSyncProvider />
+        <div className="flex-1 overflow-hidden">
+          <ReleaseView />
+        </div>
+      </div>
+    );
+  }
 
   // Ship phase uses its own full-width layout
   if (appPhase === "ship") {

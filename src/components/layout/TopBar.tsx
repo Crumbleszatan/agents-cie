@@ -14,6 +14,7 @@ import {
   Hammer,
   Grid3X3,
   Rocket,
+  Flag,
   Settings,
   LogOut,
   FolderKanban,
@@ -120,16 +121,22 @@ export function TopBar() {
     { key: "build", label: "Build", icon: Hammer, num: "01" },
     { key: "prioritize", label: "Prioritize", icon: Grid3X3, num: "02" },
     { key: "ship", label: "Ship", icon: Rocket, num: "03" },
+    { key: "release", label: "Release", icon: Flag, num: "04" },
   ];
 
   const currentPhaseIndex = phases.findIndex((p) => p.key === appPhase);
 
   const clearShipSelection = useStore((s) => s.clearShipSelection);
   const setShipDetailStoryId = useStore((s) => s.setShipDetailStoryId);
+  const shippedStoryIds = useStore((s) => s.shippedStoryIds);
+  const createReleaseFromShipped = useStore((s) => s.createReleaseFromShipped);
+  const setExpandedReleaseId = useStore((s) => s.setExpandedReleaseId);
 
   const handlePhaseChange = (phase: AppPhase) => {
-    // Disable Prioritize and Ship when no stories exist
+    // Disable Prioritize, Ship, Release when no stories exist
     if (phase !== "build" && stories.length === 0) return;
+    // Disable Release when nothing is shipped
+    if (phase === "release" && shippedStoryIds.size === 0) return;
     // Save pending edits when leaving Build
     if (appPhase === "build" && phase !== "build") {
       if (currentStory.title) saveCurrentStory();
@@ -144,6 +151,14 @@ export function TopBar() {
     if (appPhase === "ship" && phase !== "ship") {
       clearShipSelection();
       setShipDetailStoryId(null);
+    }
+    // Auto-generate release timelines when entering Release
+    if (phase === "release") {
+      createReleaseFromShipped();
+    }
+    // Reset expanded release when leaving Release
+    if (appPhase === "release" && phase !== "release") {
+      setExpandedReleaseId(null);
     }
     setAppPhase(phase);
   };
