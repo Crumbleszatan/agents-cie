@@ -135,50 +135,28 @@ export function ShipView() {
     unshipStory(storyId);
   };
 
+  const showDetail = hasShipped && shipDetailStoryId;
+
   return (
     <>
       <div className="h-full flex gap-2 p-2">
-        {/* Left: Containers + detail panel */}
-        <div className="w-[45%] flex flex-col gap-2">
-          {/* Top: containers */}
-          <div className={`flex flex-col gap-2 ${hasShipped && shipDetailStoryId ? "h-[55%]" : "flex-1"}`}>
-            <div ref={fullAiContainerRef} className="flex-1 flex flex-col">
-              <ShipContainer
-                title="Instant Shipped"
-                mode="full-ai"
-                stories={fullAiShipped}
-                epics={epics}
-                onStoryClick={handleStoryClick}
-                onDrop={handleDrop}
-                onUnship={handleUnship}
-                onAction={() => {/* TODO: trigger instant build */}}
-                selectedDetailId={shipDetailStoryId}
-              />
-            </div>
-            <div ref={engineerContainerRef} className="flex-1 flex flex-col">
-              <ShipContainer
-                title="Human Powered"
-                mode="engineer-ai"
-                stories={engineerShipped}
-                epics={epics}
-                onStoryClick={handleStoryClick}
-                onDrop={handleDrop}
-                onUnship={handleUnship}
-                onAction={() => {/* TODO: send to team */}}
-                selectedDetailId={shipDetailStoryId}
-              />
-            </div>
-          </div>
-
-          {/* Bottom: detail panel (always visible) */}
-          {hasShipped && shipDetailStoryId && (
-            <div className="h-[45%] panel shadow-soft overflow-hidden flex flex-col">
+        {/* Left: Detail panel (~25%) — only when a shipped US is selected */}
+        <AnimatePresence mode="wait">
+          {showDetail && (
+            <motion.div
+              key="detail"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: "25%", opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="panel shadow-soft overflow-hidden flex flex-col flex-shrink-0"
+            >
               <StoryDetailPanel />
-            </div>
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
 
-        {/* Right: Matrix in selection mode */}
+        {/* Center: Matrix in selection mode (~50%) */}
         <div className="flex-1 panel shadow-soft overflow-hidden flex flex-col relative min-w-0">
           <MatrixView selectionMode departingIds={departingIds} />
 
@@ -198,6 +176,36 @@ export function ShipView() {
               </motion.button>
             )}
           </AnimatePresence>
+        </div>
+
+        {/* Right: Containers (~25%) */}
+        <div className="w-[25%] flex flex-col gap-2 flex-shrink-0">
+          <div ref={fullAiContainerRef} className="flex-1 flex flex-col">
+            <ShipContainer
+              title="Instant Shipped"
+              mode="full-ai"
+              stories={fullAiShipped}
+              epics={epics}
+              onStoryClick={handleStoryClick}
+              onDrop={handleDrop}
+              onUnship={handleUnship}
+              onAction={() => {/* TODO: trigger instant build */}}
+              selectedDetailId={shipDetailStoryId}
+            />
+          </div>
+          <div ref={engineerContainerRef} className="flex-1 flex flex-col">
+            <ShipContainer
+              title="Human Powered"
+              mode="engineer-ai"
+              stories={engineerShipped}
+              epics={epics}
+              onStoryClick={handleStoryClick}
+              onDrop={handleDrop}
+              onUnship={handleUnship}
+              onAction={() => {/* TODO: send to team */}}
+              selectedDetailId={shipDetailStoryId}
+            />
+          </div>
         </div>
       </div>
 
