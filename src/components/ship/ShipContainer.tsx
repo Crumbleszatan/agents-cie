@@ -124,7 +124,6 @@ export function ShipContainer({
               {stories.map((story, i) => (
                 <motion.div
                   key={story.id}
-                  layoutId={`ship-dot-${story.id}`}
                   initial={{ opacity: 0, scale: 0.3, y: 20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.6, y: -8 }}

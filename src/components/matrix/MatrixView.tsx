@@ -21,9 +21,10 @@ const DOT_SIZE = 48;
 
 interface MatrixViewProps {
   selectionMode?: boolean;
+  departingIds?: Set<string>;
 }
 
-export function MatrixView({ selectionMode = false }: MatrixViewProps) {
+export function MatrixView({ selectionMode = false, departingIds }: MatrixViewProps) {
   const stories = useStore((s) => s.stories);
   const epics = useStore((s) => s.epics);
   const updateStoryMatrixPosition = useStore((s) => s.updateStoryMatrixPosition);
@@ -37,6 +38,7 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
   const selectedForShip = useStore((s) => s.selectedForShip);
   const toggleShipSelection = useStore((s) => s.toggleShipSelection);
   const shippedStoryIds = useStore((s) => s.shippedStoryIds);
+  const unshipStory = useStore((s) => s.unshipStory);
 
   const matrixRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -237,9 +239,12 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
       e.preventDefault();
       e.stopPropagation();
 
-      // In selection mode, toggle selection instead of dragging
+      // In selection mode, toggle selection / unship instead of dragging
       if (selectionMode) {
-        if (!shippedStoryIds.has(storyId)) {
+        if (shippedStoryIds.has(storyId)) {
+          // Already shipped → click to remove from container
+          unshipStory(storyId);
+        } else {
           toggleShipSelection(storyId);
         }
         // Always bring to foreground + show in detail panel
@@ -319,7 +324,7 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
       document.addEventListener("mousemove", onMouseMove);
       document.addEventListener("mouseup", onMouseUp);
     },
-    [selectStoryForEditing, filterEpic, filterStatus, updateStoryMatrixPosition, selectionMode, shippedStoryIds, toggleShipSelection]
+    [selectStoryForEditing, filterEpic, filterStatus, updateStoryMatrixPosition, selectionMode, shippedStoryIds, toggleShipSelection, unshipStory]
   );
 
   const getQuadrantInfo = (quadrant: string) => {
@@ -377,28 +382,31 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
     const isSelectedForShip = selectionMode && selectedForShip.has(story.id);
 
     // Scale transform for drag feedback only — no scale for selection (prevents position shift)
-    const dotScale = isDragging ? 1.2 : selectedStoryId === story.id && !selectionMode ? 1.1 : 1;
+    const isDeparting = departingIds?.has(story.id) ?? false;
+    const dotScale = isDeparting ? 0 : isDragging ? 1.2 : selectedStoryId === story.id && !selectionMode ? 1.1 : 1;
 
     return (
       <motion.div
         key={story.id}
-        layoutId={selectionMode ? `ship-dot-${story.id}` : undefined}
         data-story-dot
+        data-story-id={story.id}
         ref={(el: HTMLDivElement | null) => {
           if (el) dotRefs.current.set(story.id, el);
           else dotRefs.current.delete(story.id);
         }}
-        className={`absolute select-none rounded-xl overflow-hidden ${
+        className={`absolute select-none ${
           isDragging ? "z-40 cursor-grabbing" : selectedStoryId === story.id ? "z-[35]" : isSelectedForShip ? "z-30" : "z-20"
-        } ${selectionMode ? (isShipped ? "cursor-default" : "cursor-pointer") : "cursor-ns-resize"}`}
+        } ${selectionMode ? (isShipped ? "cursor-pointer opacity-40" : "cursor-pointer") : "cursor-ns-resize"}`}
         style={{
           left: `${pos.x}%`,
           top: `${100 - pos.y}%`,
           width: DOT_SIZE,
           height: DOT_SIZE,
           transform: `translate(-50%, -50%) scale(${dotScale})`,
-          opacity: isShipped ? 0.25 : 1,
-          boxShadow: isDragging
+          opacity: isDeparting ? 0 : undefined,
+          boxShadow: isDeparting
+            ? `0 0 20px 8px ${epicColor || '#64748b'}60`
+            : isDragging
             ? "0 8px 24px rgba(0,0,0,0.15)"
             : isSelectedForShip
             ? "0 2px 8px rgba(0,0,0,0.12)"
@@ -408,8 +416,9 @@ export function MatrixView({ selectionMode = false }: MatrixViewProps) {
             ? "0 2px 8px rgba(239,68,68,0.3)"
             : "0 1px 4px rgba(0,0,0,0.06)",
           borderRadius: 12,
-          transition: isDragging ? "box-shadow 0.1s" : "box-shadow 0.25s ease, opacity 0.25s ease",
-          pointerEvents: isShipped ? "none" : "auto",
+          transition: isDeparting
+            ? "transform 0.7s 0.15s cubic-bezier(0.4,0,0.2,1), opacity 0.7s 0.15s ease, box-shadow 0.15s ease"
+            : isDragging ? "box-shadow 0.1s" : "box-shadow 0.25s ease, opacity 0.25s ease",
         }}
         onMouseDown={(e: React.MouseEvent) => handleMouseDown(e, story.id)}
         onMouseEnter={() => {
