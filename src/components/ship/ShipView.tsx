@@ -169,6 +169,7 @@ export function ShipView() {
                 title="Instant Shipped"
                 mode="full-ai"
                 stories={fullAiShipped}
+                epics={epics}
                 onStoryClick={handleStoryClick}
                 onDrop={handleDrop}
                 onUnship={handleUnship}
@@ -181,6 +182,7 @@ export function ShipView() {
                 title="Human Powered"
                 mode="engineer-ai"
                 stories={engineerShipped}
+                epics={epics}
                 onStoryClick={handleStoryClick}
                 onDrop={handleDrop}
                 onUnship={handleUnship}
