@@ -17,6 +17,7 @@ function dbToStory(row: any): UserStory {
     acceptanceCriteria: row.acceptance_criteria || [],
     subtasks: row.subtasks || [],
     storyPoints: row.story_points,
+    estimatedHours: row.estimated_hours ?? null,
     priority: row.priority || "medium",
     labels: row.labels || [],
     affectedPages: row.affected_pages || [],
@@ -51,6 +52,7 @@ function storyToDb(story: Partial<UserStory>, projectId?: string, userId?: strin
   if (story.acceptanceCriteria !== undefined) result.acceptance_criteria = story.acceptanceCriteria;
   if (story.subtasks !== undefined) result.subtasks = story.subtasks;
   if (story.storyPoints !== undefined) result.story_points = story.storyPoints;
+  if (story.estimatedHours !== undefined) result.estimated_hours = story.estimatedHours;
   if (story.priority !== undefined) result.priority = story.priority;
   if (story.labels !== undefined) result.labels = story.labels;
   if (story.affectedPages !== undefined) result.affected_pages = story.affectedPages;

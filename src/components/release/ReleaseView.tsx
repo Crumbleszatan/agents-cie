@@ -11,9 +11,10 @@ import {
   Zap,
   Loader2,
   BarChart3,
+  AlertTriangle,
 } from "lucide-react";
 import { useStore } from "@/store/useStore";
-import { formatDateFull, VELOCITY_PER_SPRINT, SPRINT_DAYS } from "./releaseUtils";
+import { formatDateFull, computePhaseCapacity } from "./releaseUtils";
 import { ReleaseGantt } from "./ReleaseGantt";
 
 /* ── KPI Card ── */
@@ -58,6 +59,7 @@ function KpiCard({
 export function ReleaseView() {
   const releaseTimelines = useStore((s) => s.releaseTimelines);
   const stories = useStore((s) => s.stories);
+  const teamMembers = useStore((s) => s.teamMembers);
 
   /* ── KPIs computed from timelines ── */
   const kpis = useMemo(() => {
@@ -76,9 +78,11 @@ export function ReleaseView() {
       .sort((a, b) => a.getTime() - b.getTime());
     const nextDelivery = activeDates.length > 0 ? activeDates[0] : null;
 
-    // Velocity estimation
-    const sprints = totalSP > 0 ? Math.ceil(totalSP / VELOCITY_PER_SPRINT) : 0;
-    const velocity = `${VELOCITY_PER_SPRINT} SP/sprint`;
+    // Capacity (team-driven)
+    const { devCapacity, qaCapacity } = computePhaseCapacity(teamMembers);
+
+    // Alerts: any release with alertDatePast
+    const alertCount = releaseTimelines.filter((r) => r.alertDatePast).length;
 
     return {
       total,
@@ -89,10 +93,11 @@ export function ReleaseView() {
       upcoming,
       totalSP,
       nextDelivery,
-      sprints,
-      velocity,
+      devCapacity,
+      qaCapacity,
+      alertCount,
     };
-  }, [releaseTimelines]);
+  }, [releaseTimelines, teamMembers]);
 
   const isEmpty = releaseTimelines.length === 0;
 
@@ -128,7 +133,7 @@ export function ReleaseView() {
             icon={TrendingUp}
             label="Story Points"
             value={kpis.totalSP}
-            sub={`${kpis.sprints} sprint${kpis.sprints > 1 ? "s" : ""}`}
+            sub={`${kpis.total} release${kpis.total > 1 ? "s" : ""}`}
             color="text-violet-500"
             delay={0.15}
           />
@@ -140,11 +145,11 @@ export function ReleaseView() {
             delay={0.2}
           />
           <KpiCard
-            icon={BarChart3}
-            label="Vélocité"
-            value={kpis.velocity}
-            sub={`${SPRINT_DAYS}j / sprint`}
-            color="text-foreground"
+            icon={kpis.alertCount > 0 ? AlertTriangle : BarChart3}
+            label="Capacité"
+            value={`${kpis.devCapacity.toFixed(1)} SP/j`}
+            sub={`Dev ${kpis.devCapacity.toFixed(1)} · QA ${kpis.qaCapacity.toFixed(1)} SP/j${kpis.alertCount > 0 ? ` · ${kpis.alertCount} alerte${kpis.alertCount > 1 ? "s" : ""}` : ""}`}
+            color={kpis.alertCount > 0 ? "text-red-500" : "text-foreground"}
             delay={0.25}
           />
         </div>

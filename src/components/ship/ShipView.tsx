@@ -4,11 +4,14 @@ import { useStore } from "@/store/useStore";
 import { useMemo, useState, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send } from "lucide-react";
+import { Send, AlertTriangle, X } from "lucide-react";
 import { MatrixView } from "@/components/matrix/MatrixView";
 import { ShipContainer } from "@/components/ship/ShipContainer";
 import { StoryDetailPanel } from "@/components/story-detail/StoryDetailPanel";
 import { InstantShipModal } from "@/components/ship/InstantShipModal";
+import { HumanReleaseModal } from "@/components/ship/HumanReleaseModal";
+import { validateStoriesForShipping } from "@/components/release/releaseUtils";
+import type { UserStory } from "@/types";
 
 interface FlyingStory {
   id: string;
@@ -33,12 +36,20 @@ export function ShipView() {
   const setShipDetailStoryId = useStore((s) => s.setShipDetailStoryId);
   const selectStoryForEditing = useStore((s) => s.selectStoryForEditing);
 
+  const projectConfig = useStore((s) => s.projectConfig);
+
   // Refs to containers for target position
   const fullAiContainerRef = useRef<HTMLDivElement>(null);
   const engineerContainerRef = useRef<HTMLDivElement>(null);
 
   // Instant Ship modal state
   const [showInstantModal, setShowInstantModal] = useState(false);
+
+  // Human Release modal state
+  const [showHumanModal, setShowHumanModal] = useState(false);
+
+  // Blocked stories warning
+  const [blockedStories, setBlockedStories] = useState<UserStory[]>([]);
 
   // Animation state
   const [flyingStories, setFlyingStories] = useState<FlyingStory[]>([]);
@@ -64,6 +75,15 @@ export function ShipView() {
     if (selectedIds.length === 0) return;
 
     const storiesToShip = state.stories.filter((s) => state.selectedForShip.has(s.id));
+
+    // Validate: block stories without estimation
+    const { blocked } = validateStoriesForShipping(storiesToShip, state.projectConfig.estimationUnit);
+    if (blocked.length > 0) {
+      setBlockedStories(blocked);
+      return; // Don't ship — user must fix estimations first
+    }
+    setBlockedStories([]);
+
     const allEpics = state.epics;
 
     const entries: FlyingStory[] = [];
@@ -140,9 +160,16 @@ export function ShipView() {
   };
 
   const handleInstantBuildConfirm = (buildDate: string, buildTime: string, mepDate: string) => {
-    // TODO: persist the planned release with these dates
-    console.log("Instant Release planned:", { buildDate, buildTime, mepDate, stories: fullAiShipped.length });
+    const state = useStore.getState();
+    state.createReleaseFromShipped();
     setShowInstantModal(false);
+  };
+
+  const handleHumanReleaseConfirm = (mepDeadline: string) => {
+    const state = useStore.getState();
+    const storyIds = engineerShipped.map((s) => s.id);
+    state.createHumanRelease(storyIds, mepDeadline);
+    setShowHumanModal(false);
   };
 
   const showDetail = hasShipped && shipDetailStoryId;
@@ -169,6 +196,39 @@ export function ShipView() {
         {/* Center: Matrix in selection mode (~50%) */}
         <div className="flex-1 panel shadow-soft overflow-hidden flex flex-col relative min-w-0">
           <MatrixView selectionMode departingIds={departingIds} />
+
+          {/* Blocked stories warning */}
+          <AnimatePresence>
+            {blockedStories.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className="absolute bottom-16 left-1/2 -translate-x-1/2 z-30 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 shadow-lg max-w-md"
+              >
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-amber-800">
+                      {blockedStories.length} US sans estimation
+                    </p>
+                    <p className="text-[11px] text-amber-600 mt-0.5">
+                      {blockedStories.map((s) => s.storyNumber ? `US-${s.storyNumber}` : s.title || s.id).join(", ")}
+                    </p>
+                    <p className="text-[11px] text-amber-600 mt-1">
+                      Estimez les {projectConfig.estimationUnit === "sp" ? "story points" : "heures"} avant de shipper.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setBlockedStories([])}
+                    className="p-0.5 rounded hover:bg-amber-200 transition-colors text-amber-600"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Floating Ship button */}
           <AnimatePresence>
@@ -212,7 +272,7 @@ export function ShipView() {
               onStoryClick={handleStoryClick}
               onDrop={handleDrop}
               onUnship={handleUnship}
-              onAction={() => {/* TODO: send to team */}}
+              onAction={() => setShowHumanModal(true)}
               selectedDetailId={shipDetailStoryId}
             />
           </div>
@@ -225,6 +285,15 @@ export function ShipView() {
           stories={fullAiShipped}
           onConfirm={handleInstantBuildConfirm}
           onClose={() => setShowInstantModal(false)}
+        />
+      )}
+
+      {/* ─── Human Release Modal ─── */}
+      {showHumanModal && (
+        <HumanReleaseModal
+          stories={engineerShipped}
+          onConfirm={handleHumanReleaseConfirm}
+          onClose={() => setShowHumanModal(false)}
         />
       )}
 

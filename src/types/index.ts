@@ -61,6 +61,7 @@ export interface UserStory {
   acceptanceCriteria: AcceptanceCriterion[];
   subtasks: Subtask[];
   storyPoints: number | null;
+  estimatedHours: number | null; // alternative to SP when project uses hours
   priority: "low" | "medium" | "high" | "critical";
   labels: string[];
   affectedPages: string[];
@@ -172,13 +173,96 @@ export interface Release {
 export type ViewMode = "live-tagging" | "ia-preview" | "architecture";
 export type AppPhase = "build" | "prioritize" | "ship" | "release";
 
+// ─── Team & Capacity Configuration ───
+
+export type TeamProfile =
+  | "dev-front"
+  | "dev-back"
+  | "fullstack"
+  | "qa"
+  | "devops"
+  | "chef-de-projet";
+
+export type ExperienceLevel = "junior" | "confirme" | "senior";
+
+export const EXPERIENCE_COEFFICIENTS: Record<ExperienceLevel, number> = {
+  junior: 0.7,
+  confirme: 1.0,
+  senior: 1.3,
+};
+
+/** Base velocity in SP/day by profile category */
+export const BASE_VELOCITY: Record<"dev" | "qa", number> = {
+  dev: 2,
+  qa: 4,
+};
+
+/** Maps profiles to their velocity category */
+export const PROFILE_VELOCITY_CATEGORY: Record<TeamProfile, "dev" | "qa" | null> = {
+  "dev-front": "dev",
+  "dev-back": "dev",
+  fullstack: "dev",
+  qa: "qa",
+  devops: null,
+  "chef-de-projet": null,
+};
+
+/** Maps profiles to which phases they contribute to */
+export const PROFILE_PHASE_MAP: Record<TeamProfile, string[]> = {
+  "dev-front": ["Dev", "Build"],
+  "dev-back": ["Dev", "Build"],
+  fullstack: ["Dev", "Build"],
+  qa: ["Testing", "Recette"],
+  devops: ["Deploy Recette", "Deploy Prod", "MEP"],
+  "chef-de-projet": [],
+};
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  profile: TeamProfile;
+  experienceLevel: ExperienceLevel;
+  availability: number; // 0.0 to 1.0
+}
+
+export type EstimationUnit = "sp" | "hours";
+
+export interface ProjectConfig {
+  estimationUnit: EstimationUnit;
+  spToHoursRatio: number;     // default 4 (1 SP = 4h)
+  hoursPerDay: number;        // default 7
+  holidayCountry: string;     // ISO code, e.g. "FR"
+  testingRatio: number;       // default 0.30 for human releases
+  recetteRatio: number;       // default 0.20 for human releases
+  fibonacciScale: number[];   // [1, 2, 3, 5, 8, 13, 21]
+}
+
+// ─── Confidence Interval ───
+
+export type ConfidenceLevel = "optimistic" | "realistic" | "pessimistic";
+
+export const CONFIDENCE_MULTIPLIERS: Record<ConfidenceLevel, number> = {
+  optimistic: 0.8,
+  realistic: 1.0,
+  pessimistic: 1.4,
+};
+
+export interface ConfidenceDates {
+  optimistic: string;  // ISO date
+  realistic: string;   // ISO date
+  pessimistic: string; // ISO date
+}
+
 // ─── Release Planning ───
+
 export interface ReleasePhaseSegment {
   id: string;
-  name: string; // "Build" | "Review" | "Deploy" | "Prod" | "Testing" | "Recette" | "MEP"
+  name: string;
   startDate: string;
   endDate: string;
   durationDays: number;
+  durationOptimistic?: number;
+  durationPessimistic?: number;
   status: "pending" | "in-progress" | "completed";
   color: string;
 }
@@ -189,11 +273,15 @@ export interface ReleaseTimeline {
   storyIds: string[];
   releaseType: "instant" | "human";
   totalStoryPoints: number;
+  totalHours?: number;
   phases: ReleasePhaseSegment[];
   startDate: string;
   endDate: string;
+  confidenceDates?: ConfidenceDates;
   status: "upcoming" | "in-progress" | "completed";
   createdAt: string;
+  mepDeadline?: string;
+  alertDatePast?: boolean;
 }
 export type TrainingStatus = "not_started" | "in_progress" | "complete";
 

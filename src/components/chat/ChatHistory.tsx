@@ -72,7 +72,7 @@ export function ChatHistory({ onClose }: { onClose: () => void }) {
         title: "",
         asA: "", iWant: "", soThat: "",
         acceptanceCriteria: [], subtasks: [],
-        storyPoints: null, priority: "medium" as const,
+        storyPoints: null, estimatedHours: null, priority: "medium" as const,
         labels: [], affectedPages: [], affectedServices: [], definitionOfDone: [],
         status: "draft" as const, effort: 0, impact: 0,
         productionMode: "engineer-ai" as const, productionStatus: "backlog",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useStore } from "@/store/useStore";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bot,
@@ -19,6 +20,7 @@ import {
   Circle,
 } from "lucide-react";
 import type { UserStory, Epic } from "@/types";
+import { computePhaseCapacity, addWorkingDays, formatDateFull } from "@/components/release/releaseUtils";
 
 interface ShipContainerProps {
   title: string;
@@ -40,10 +42,6 @@ const priorityConfig: Record<string, { label: string; color: string; icon: typeo
   low: { label: "Basse", color: "text-slate-400", icon: Circle },
 };
 
-/* ── Velocity assumptions for KPI estimation ── */
-const VELOCITY_PER_SPRINT = 18; // story points per 2-week sprint
-const SPRINT_DAYS = 10; // working days per sprint
-
 export function ShipContainer({
   title,
   mode,
@@ -58,35 +56,43 @@ export function ShipContainer({
   const [isDragOver, setIsDragOver] = useState(false);
   const isViolet = mode === "full-ai";
 
-  /* ── KPIs computation ── */
+  const teamMembers = useStore((s) => s.teamMembers);
+  const projectConfig = useStore((s) => s.projectConfig);
+
+  /* ── KPIs computation (capacity-driven) ── */
   const kpis = useMemo(() => {
     const totalPoints = stories.reduce((sum, s) => sum + (s.storyPoints || 0), 0);
+    const totalHours = stories.reduce((sum, s) => sum + (s.estimatedHours || 0), 0);
     const count = stories.length;
-    const sprints = totalPoints > 0 ? Math.ceil(totalPoints / VELOCITY_PER_SPRINT) : 0;
-    const durationDays = sprints * SPRINT_DAYS;
+    const { devCapacity } = computePhaseCapacity(teamMembers);
 
-    // Estimated delivery date
+    // Duration in working days based on team capacity
+    const durationDays = totalPoints > 0 && devCapacity > 0
+      ? Math.ceil(totalPoints / devCapacity)
+      : 0;
+
+    // Estimated delivery date (holiday-aware)
     const now = new Date();
-    const deliveryDate = new Date(now);
-    // Add working days (skip weekends)
-    let addedDays = 0;
-    while (addedDays < durationDays) {
-      deliveryDate.setDate(deliveryDate.getDate() + 1);
-      const day = deliveryDate.getDay();
-      if (day !== 0 && day !== 6) addedDays++;
-    }
+    const deliveryDate = durationDays > 0
+      ? addWorkingDays(now, durationDays, projectConfig.holidayCountry)
+      : now;
 
-    const avgPoints = count > 0 ? (totalPoints / count).toFixed(1) : "0";
+    // Count stories without estimates (warning)
+    const missingEstimates = stories.filter((s) => {
+      if (projectConfig.estimationUnit === "sp") return !s.storyPoints || s.storyPoints <= 0;
+      return !s.estimatedHours || s.estimatedHours <= 0;
+    }).length;
 
     return {
       totalPoints,
+      totalHours,
       count,
-      sprints,
       durationDays,
       deliveryDate,
-      avgPoints,
+      devCapacity,
+      missingEstimates,
     };
-  }, [stories]);
+  }, [stories, teamMembers, projectConfig]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -113,9 +119,6 @@ export function ShipContainer({
   };
 
   const getEpic = (epicId?: string) => epicId ? epics.find((e) => e.id === epicId) : null;
-
-  const formatDate = (d: Date) =>
-    d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
 
   return (
     <div
@@ -173,7 +176,7 @@ export function ShipContainer({
 
       {/* ── KPI Bar ── */}
       {stories.length > 0 && (
-        <div className={`px-3 py-2 border-b border-border-light flex items-center gap-3 ${
+        <div className={`px-3 py-2 border-b border-border-light flex items-center gap-3 flex-wrap ${
           isViolet ? "bg-violet-50/30" : "bg-amber-50/30"
         }`}>
           <div className="flex items-center gap-1" title="Nombre de US">
@@ -185,25 +188,34 @@ export function ShipContainer({
           <div className="flex items-center gap-1" title="Story Points total">
             <TrendingUp className={`w-3 h-3 ${isViolet ? "text-violet-400" : "text-amber-400"}`} />
             <span className="text-[11px] font-bold">{kpis.totalPoints}</span>
-            <span className="text-[10px] text-muted-foreground">pts</span>
+            <span className="text-[10px] text-muted-foreground">SP</span>
           </div>
           <div className="w-px h-3.5 bg-border-light" />
-          <div className="flex items-center gap-1" title="Durée estimée">
+          <div className="flex items-center gap-1" title="Durée estimée en jours ouvrés">
             <Clock className="w-3 h-3 text-muted-foreground" />
             <span className="text-[11px] font-bold">
-              {kpis.sprints > 0 ? `${kpis.sprints} sprint${kpis.sprints > 1 ? "s" : ""}` : "—"}
+              {kpis.durationDays > 0 ? `${kpis.durationDays}j` : "—"}
             </span>
-            {kpis.durationDays > 0 && (
-              <span className="text-[10px] text-muted-foreground">({kpis.durationDays}j)</span>
-            )}
+            <span className="text-[10px] text-muted-foreground">ouvrés</span>
           </div>
           <div className="w-px h-3.5 bg-border-light" />
           <div className="flex items-center gap-1" title="Date de livraison estimée">
             <CalendarCheck className={`w-3 h-3 ${isViolet ? "text-violet-400" : "text-amber-400"}`} />
             <span className="text-[11px] font-semibold">
-              {kpis.durationDays > 0 ? formatDate(kpis.deliveryDate) : "—"}
+              {kpis.durationDays > 0 ? formatDateFull(kpis.deliveryDate) : "—"}
             </span>
           </div>
+          {kpis.missingEstimates > 0 && (
+            <>
+              <div className="w-px h-3.5 bg-border-light" />
+              <div className="flex items-center gap-1" title="US sans estimation">
+                <AlertCircle className="w-3 h-3 text-amber-500" />
+                <span className="text-[10px] font-medium text-amber-600">
+                  {kpis.missingEstimates} sans estim.
+                </span>
+              </div>
+            </>
+          )}
         </div>
       )}
 

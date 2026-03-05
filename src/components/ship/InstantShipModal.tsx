@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useStore } from "@/store/useStore";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -13,9 +14,17 @@ import {
   Hammer,
   Eye,
   MessageSquare,
+  TrendingUp,
 } from "lucide-react";
 import type { UserStory } from "@/types";
-import { addWorkingDays, formatDateFull, INSTANT_PHASE_COLORS } from "@/components/release/releaseUtils";
+import {
+  computeInstantPhases,
+  computeConfidenceDates,
+  computePhaseCapacity,
+  formatDateFull,
+  addWorkingDays,
+  INSTANT_PHASE_COLORS,
+} from "@/components/release/releaseUtils";
 
 interface InstantShipModalProps {
   stories: UserStory[];
@@ -24,6 +33,9 @@ interface InstantShipModalProps {
 }
 
 export function InstantShipModal({ stories, onConfirm, onClose }: InstantShipModalProps) {
+  const projectConfig = useStore((s) => s.projectConfig);
+  const teamMembers = useStore((s) => s.teamMembers);
+
   // Default build: now
   const now = new Date();
   const todayStr = now.toISOString().split("T")[0];
@@ -38,50 +50,35 @@ export function InstantShipModal({ stories, onConfirm, onClose }: InstantShipMod
     [stories]
   );
 
-  // Auto-computed phases based on build date + volume
-  const phases = useMemo(() => {
+  // Team capacity info
+  const capacityInfo = useMemo(
+    () => computePhaseCapacity(teamMembers),
+    [teamMembers]
+  );
+
+  // Compute phases using the capacity-driven engine
+  const computed = useMemo(() => {
     const start = new Date(`${buildDate}T${buildTime}`);
+    const phases = computeInstantPhases(totalSP, start, teamMembers, projectConfig);
+    const totalDays = phases.reduce((s, p) => s + p.durationDays, 0);
+    const endDate = phases[phases.length - 1].endDate;
+    const mepDate = new Date(endDate);
+    const confidenceDates = computeConfidenceDates(mepDate, totalDays, projectConfig);
 
-    // Build: instantaneous for instant ship, but we model it as SP * 0.3 days (min 1)
-    const buildDays = Math.max(1, Math.round(totalSP * 0.3));
-
-    // Review technique: always 1 day
-    const reviewDays = 1;
-
-    // Recette & retours: auto-calculated based on volume
-    // Base: 1 day for small releases, scales with SP
-    const recetteDays = Math.max(1, Math.round(totalSP * 0.15));
-
-    const buildStart = new Date(start);
-    const buildEnd = addWorkingDays(buildStart, buildDays);
-
-    const reviewStart = new Date(buildEnd);
-    const reviewEnd = addWorkingDays(reviewStart, reviewDays);
-
-    const recetteStart = new Date(reviewEnd);
-    const recetteEnd = addWorkingDays(recetteStart, recetteDays);
-
-    return {
-      build: { start: buildStart, end: buildEnd, days: buildDays },
-      review: { start: reviewStart, end: reviewEnd, days: reviewDays },
-      recette: { start: recetteStart, end: recetteEnd, days: recetteDays },
-      mepDate: recetteEnd,
-      totalDays: buildDays + reviewDays + recetteDays,
-    };
-  }, [buildDate, buildTime, totalSP]);
+    return { phases, totalDays, mepDate, confidenceDates };
+  }, [buildDate, buildTime, totalSP, teamMembers, projectConfig]);
 
   // User can override the desired MEP date
-  const defaultMepStr = phases.mepDate.toISOString().split("T")[0];
+  const defaultMepStr = computed.mepDate.toISOString().split("T")[0];
   const [mepDate, setMepDate] = useState(defaultMepStr);
 
   // Recalculate if MEP date differs from auto
   const mepAdjusted = useMemo(() => {
-    const autoMep = phases.mepDate.toISOString().split("T")[0];
+    const autoMep = computed.mepDate.toISOString().split("T")[0];
     if (mepDate === autoMep) return null;
 
     const desiredMep = new Date(mepDate);
-    const autoMepDate = phases.mepDate;
-    const diffDays = Math.round((desiredMep.getTime() - autoMepDate.getTime()) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.round((desiredMep.getTime() - computed.mepDate.getTime()) / (1000 * 60 * 60 * 24));
 
     if (diffDays > 0) {
       return { status: "extended" as const, days: diffDays };
@@ -89,18 +86,30 @@ export function InstantShipModal({ stories, onConfirm, onClose }: InstantShipMod
       return { status: "compressed" as const, days: Math.abs(diffDays) };
     }
     return null;
-  }, [mepDate, phases.mepDate]);
+  }, [mepDate, computed.mepDate]);
 
   // Update default MEP when phases change
   useMemo(() => {
-    const newDefault = phases.mepDate.toISOString().split("T")[0];
+    const newDefault = computed.mepDate.toISOString().split("T")[0];
     if (mepDate === defaultMepStr || mepDate < buildDate) {
       setMepDate(newDefault);
     }
-  }, [phases.mepDate]);
+  }, [computed.mepDate]);
 
   const handleConfirm = () => {
     onConfirm(buildDate, buildTime, mepDate);
+  };
+
+  const phaseIcons: Record<string, typeof Hammer> = {
+    Build: Hammer,
+    Review: Eye,
+    Recette: MessageSquare,
+  };
+
+  const phaseFormulas: Record<string, string> = {
+    Build: `${totalSP} SP × 0.3 = ${computed.phases[0]?.durationDays ?? 0}j`,
+    Review: `${totalSP} SP × 0.1 / ${projectConfig.hoursPerDay}h = ${computed.phases[1]?.durationDays ?? 0}j`,
+    Recette: `${totalSP} SP × 0.15 / ${capacityInfo.qaCapacity.toFixed(1)} QA = ${computed.phases[2]?.durationDays ?? 0}j`,
   };
 
   return (
@@ -117,7 +126,7 @@ export function InstantShipModal({ stories, onConfirm, onClose }: InstantShipMod
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ type: "spring", stiffness: 400, damping: 30 }}
-          className="bg-white rounded-2xl shadow-xl border border-border-light w-[520px] max-h-[85vh] overflow-y-auto"
+          className="bg-white rounded-2xl shadow-xl border border-border-light w-[540px] max-h-[85vh] overflow-y-auto"
         >
           {/* Header */}
           <div className="flex items-center gap-3 px-5 py-4 border-b border-border-light bg-violet-50/30">
@@ -127,7 +136,7 @@ export function InstantShipModal({ stories, onConfirm, onClose }: InstantShipMod
             <div className="flex-1">
               <h3 className="text-sm font-bold">Planifier l&apos;Instant Release</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {stories.length} US · {totalSP} story points
+                {stories.length} US · {totalSP} SP · Capacité QA : {capacityInfo.qaCapacity.toFixed(1)} SP/j
               </p>
             </div>
             <button
@@ -200,7 +209,7 @@ export function InstantShipModal({ stories, onConfirm, onClose }: InstantShipMod
                   </p>
                 )}
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  Calculé auto : {formatDateFull(phases.mepDate)}
+                  Calculé auto : {formatDateFull(computed.mepDate)}
                 </p>
               </div>
             </div>
@@ -212,83 +221,43 @@ export function InstantShipModal({ stories, onConfirm, onClose }: InstantShipMod
               </p>
 
               <div className="space-y-2">
-                {/* Build phase */}
-                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-violet-50/50 border border-violet-100">
-                  <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: INSTANT_PHASE_COLORS.Build }}
-                  >
-                    <Hammer className="w-3.5 h-3.5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-semibold">Build</span>
-                      <span className="text-[10px] text-violet-500 font-medium">
-                        {phases.build.days}j
+                {computed.phases.map((phase, i) => {
+                  const Icon = phaseIcons[phase.name] || Hammer;
+                  const formula = phaseFormulas[phase.name] || "";
+                  return (
+                    <div
+                      key={phase.id}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl border"
+                      style={{
+                        backgroundColor: `${phase.color}08`,
+                        borderColor: `${phase.color}25`,
+                      }}
+                    >
+                      <div
+                        className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{ backgroundColor: phase.color }}
+                      >
+                        <Icon className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[12px] font-semibold">{phase.name}</span>
+                          <span className="text-[10px] text-violet-500 font-medium">
+                            {phase.durationDays}j
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          {formatDateFull(new Date(phase.startDate))}
+                          <ArrowRight className="w-2.5 h-2.5 inline mx-1" />
+                          {formatDateFull(new Date(phase.endDate))}
+                        </p>
+                      </div>
+                      <span className="text-[9px] font-medium text-violet-400 bg-violet-100/50 px-2 py-0.5 rounded">
+                        {formula}
                       </span>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      {formatDateFull(phases.build.start)}
-                      <ArrowRight className="w-2.5 h-2.5 inline mx-1" />
-                      {formatDateFull(phases.build.end)}
-                    </p>
-                  </div>
-                  <span className="text-[9px] font-medium text-violet-400 bg-violet-100 px-2 py-0.5 rounded">
-                    {totalSP} × 0.3 = {phases.build.days}j
-                  </span>
-                </div>
-
-                {/* Review phase */}
-                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-violet-50/30 border border-violet-100/60">
-                  <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: INSTANT_PHASE_COLORS.Review }}
-                  >
-                    <Eye className="w-3.5 h-3.5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-semibold">Review Technique</span>
-                      <span className="text-[10px] text-violet-500 font-medium">
-                        {phases.review.days}j
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      {formatDateFull(phases.review.start)}
-                      <ArrowRight className="w-2.5 h-2.5 inline mx-1" />
-                      {formatDateFull(phases.review.end)}
-                    </p>
-                  </div>
-                  <span className="text-[9px] font-medium text-violet-400 bg-violet-100/60 px-2 py-0.5 rounded">
-                    Fixe 1j
-                  </span>
-                </div>
-
-                {/* Recette phase */}
-                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-violet-50/20 border border-violet-100/40">
-                  <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: INSTANT_PHASE_COLORS.Deploy }}
-                  >
-                    <MessageSquare className="w-3.5 h-3.5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-semibold">Recette & Retours</span>
-                      <span className="text-[10px] text-violet-500 font-medium">
-                        {phases.recette.days}j
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      {formatDateFull(phases.recette.start)}
-                      <ArrowRight className="w-2.5 h-2.5 inline mx-1" />
-                      {formatDateFull(phases.recette.end)}
-                    </p>
-                  </div>
-                  <span className="text-[9px] font-medium text-violet-400 bg-violet-100/40 px-2 py-0.5 rounded">
-                    {totalSP} × 0.15 = {phases.recette.days}j
-                  </span>
-                </div>
+                  );
+                })}
               </div>
 
               {/* Total summary */}
@@ -297,8 +266,39 @@ export function InstantShipModal({ stories, onConfirm, onClose }: InstantShipMod
                   Durée totale estimée
                 </span>
                 <span className="text-sm font-bold">
-                  {phases.totalDays} jours ouvrés
+                  {computed.totalDays} jours ouvrés
                 </span>
+              </div>
+            </div>
+
+            {/* Confidence dates */}
+            <div>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-3">
+                <TrendingUp className="w-3 h-3" />
+                Intervalle de confiance
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100 text-center">
+                  <p className="text-[9px] font-semibold text-emerald-600 uppercase">Optimiste</p>
+                  <p className="text-[12px] font-bold text-emerald-700 mt-0.5">
+                    {formatDateFull(new Date(computed.confidenceDates.optimistic))}
+                  </p>
+                  <p className="text-[9px] text-emerald-500">×0.8</p>
+                </div>
+                <div className="px-3 py-2 rounded-lg bg-blue-50 border border-blue-100 text-center">
+                  <p className="text-[9px] font-semibold text-blue-600 uppercase">Réaliste</p>
+                  <p className="text-[12px] font-bold text-blue-700 mt-0.5">
+                    {formatDateFull(new Date(computed.confidenceDates.realistic))}
+                  </p>
+                  <p className="text-[9px] text-blue-500">×1.0</p>
+                </div>
+                <div className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-100 text-center">
+                  <p className="text-[9px] font-semibold text-amber-600 uppercase">Pessimiste</p>
+                  <p className="text-[12px] font-bold text-amber-700 mt-0.5">
+                    {formatDateFull(new Date(computed.confidenceDates.pessimistic))}
+                  </p>
+                  <p className="text-[9px] text-amber-500">×1.4</p>
+                </div>
               </div>
             </div>
           </div>

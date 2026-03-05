@@ -42,6 +42,7 @@ export function ReleaseGantt({ timelines, stories }: ReleaseGanttProps) {
   const setExpandedReleaseId = useStore((s) => s.setExpandedReleaseId);
   const updateReleaseTimeline = useStore((s) => s.updateReleaseTimeline);
   const epics = useStore((s) => s.epics);
+  const holidayCountry = useStore((s) => s.projectConfig.holidayCountry);
 
   const ganttRef = useRef<HTMLDivElement>(null);
   const [dragState, setDragState] = useState<{
@@ -148,7 +149,7 @@ export function ReleaseGantt({ timelines, stories }: ReleaseGanttProps) {
       // Recompute all phase dates based on new start
       const newPhases = timeline.phases.map((phase, i) => {
         if (i === 0) {
-          const phaseEnd = addWorkingDays(newStart, phase.durationDays);
+          const phaseEnd = addWorkingDays(newStart, phase.durationDays, holidayCountry);
           return {
             ...phase,
             startDate: newStart.toISOString(),
@@ -161,16 +162,17 @@ export function ReleaseGantt({ timelines, stories }: ReleaseGanttProps) {
             .slice(0, i)
             .reduce((_, p, idx) => {
               if (idx === 0) {
-                return addWorkingDays(newStart, p.durationDays).toISOString();
+                return addWorkingDays(newStart, p.durationDays, holidayCountry).toISOString();
               }
               // Iteratively compute
               return addWorkingDays(
                 new Date(_),
-                timeline.phases[idx].durationDays
+                timeline.phases[idx].durationDays,
+                holidayCountry
               ).toISOString();
             }, newStart.toISOString())
         );
-        const phaseEnd = addWorkingDays(prevEnd, phase.durationDays);
+        const phaseEnd = addWorkingDays(prevEnd, phase.durationDays, holidayCountry);
         return {
           ...phase,
           startDate: prevEnd.toISOString(),
@@ -186,7 +188,7 @@ export function ReleaseGantt({ timelines, stories }: ReleaseGanttProps) {
         phases: newPhases,
       });
     },
-    [dragState, totalDays, timelines, updateReleaseTimeline]
+    [dragState, totalDays, timelines, updateReleaseTimeline, holidayCountry]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -263,14 +265,20 @@ export function ReleaseGantt({ timelines, stories }: ReleaseGanttProps) {
 
           {/* Release name label */}
           <div
-            className="absolute top-1.5 text-[10px] font-semibold text-muted-foreground pointer-events-none whitespace-nowrap"
+            className="absolute top-1.5 text-[10px] font-semibold text-muted-foreground pointer-events-none whitespace-nowrap flex items-center gap-1"
             style={{
               left: `${leftPct + widthPct + 0.5}%`,
             }}
           >
+            {timeline.alertDatePast && (
+              <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-red-100 text-red-600 text-[8px] font-bold">
+                <AlertCircle className="w-2.5 h-2.5" />
+                Retard
+              </span>
+            )}
             {timeline.name}
             <span className="text-muted-foreground/50 ml-1.5">
-              {timeline.totalStoryPoints} pts
+              {timeline.totalStoryPoints} SP
             </span>
           </div>
         </div>

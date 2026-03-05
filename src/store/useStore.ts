@@ -15,8 +15,15 @@ import type {
   DomModification,
   TrainingStatus,
   ReleaseTimeline,
+  ProjectConfig,
+  TeamMember,
 } from "@/types";
-import { computeInstantPhases, computeHumanPhases } from "@/components/release/releaseUtils";
+import {
+  computeInstantPhases,
+  computeHumanPhasesRetro,
+  computeConfidenceDates,
+  computePhaseCapacity,
+} from "@/components/release/releaseUtils";
 
 function uuid() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -164,10 +171,20 @@ interface AppState {
   // Release timelines
   releaseTimelines: ReleaseTimeline[];
   createReleaseFromShipped: () => void;
+  createHumanRelease: (storyIds: string[], mepDeadline: string) => void;
   updateReleaseTimeline: (id: string, updates: Partial<ReleaseTimeline>) => void;
   removeReleaseTimeline: (id: string) => void;
   expandedReleaseId: string | null;
   setExpandedReleaseId: (id: string | null) => void;
+
+  // Project config & team
+  projectConfig: ProjectConfig;
+  setProjectConfig: (config: Partial<ProjectConfig>) => void;
+  teamMembers: TeamMember[];
+  addTeamMember: (member: TeamMember) => void;
+  updateTeamMember: (id: string, updates: Partial<TeamMember>) => void;
+  removeTeamMember: (id: string) => void;
+  setTeamMembers: (members: TeamMember[]) => void;
 
   // Shared filters (Prioritize & Ship phases)
   filterEpic: string;
@@ -212,6 +229,7 @@ function createDefaultStory(): UserStory {
     acceptanceCriteria: [],
     subtasks: [],
     storyPoints: null,
+    estimatedHours: null,
     priority: "medium",
     labels: [],
     affectedPages: [],
@@ -239,6 +257,16 @@ const defaultContext: ConversationContext = {
   questionsAsked: 0,
   topicsExplored: [],
   currentFocus: "initial",
+};
+
+const defaultProjectConfig: ProjectConfig = {
+  estimationUnit: "sp",
+  spToHoursRatio: 4,
+  hoursPerDay: 7,
+  holidayCountry: "FR",
+  testingRatio: 0.30,
+  recetteRatio: 0.20,
+  fibonacciScale: [1, 2, 3, 5, 8, 13, 21],
 };
 
 // Module-level debounce timer for auto-saving currentStory edits
@@ -755,60 +783,83 @@ export const useStore = create<AppState>((set, get) => ({
     const unassigned = shippedStories.filter((s) => !assignedIds.has(s.id));
     if (unassigned.length === 0) return;
 
+    // Only auto-create Instant releases — Human releases are created via HumanReleaseModal
     const instantStories = unassigned.filter((s) => s.productionMode === "full-ai");
-    const humanStories = unassigned.filter((s) => s.productionMode === "engineer-ai");
-    const newReleases: ReleaseTimeline[] = [];
+    if (instantStories.length === 0) return;
+
+    const { projectConfig, teamMembers } = state;
+    const totalSP = instantStories.reduce((sum, s) => sum + (s.storyPoints || 0), 0);
 
     const existingInstant = state.releaseTimelines.filter((r) => r.releaseType === "instant");
+    const lastEnd = existingInstant.length > 0
+      ? new Date(existingInstant[existingInstant.length - 1].endDate)
+      : new Date();
+    const startDate = lastEnd > new Date() ? lastEnd : new Date();
+
+    const phases = computeInstantPhases(totalSP, startDate, teamMembers, projectConfig);
+    const totalDays = phases.reduce((s, p) => s + p.durationDays, 0);
+    const endDate = phases[phases.length - 1].endDate;
+    const confidenceDates = computeConfidenceDates(
+      new Date(endDate),
+      totalDays,
+      projectConfig,
+    );
+
+    const num = existingInstant.length + 1;
+    const release: ReleaseTimeline = {
+      id: uuid(),
+      name: `R-${num} Instant`,
+      storyIds: instantStories.map((s) => s.id),
+      releaseType: "instant",
+      totalStoryPoints: totalSP,
+      phases,
+      startDate: phases[0].startDate,
+      endDate,
+      status: "upcoming",
+      createdAt: new Date().toISOString(),
+      confidenceDates,
+    };
+
+    set((s) => ({ releaseTimelines: [...s.releaseTimelines, release] }));
+  },
+
+  createHumanRelease: (storyIds, mepDeadline) => {
+    const state = get();
+    const { projectConfig, teamMembers } = state;
+    const stories = state.stories.filter((s) => storyIds.includes(s.id));
+    const totalSP = stories.reduce((sum, s) => sum + (s.storyPoints || 0), 0);
+
+    const result = computeHumanPhasesRetro(totalSP, new Date(mepDeadline), teamMembers, projectConfig);
+    const { phases, devStartDate, alertPast } = result;
+
+    const totalDays = phases.reduce((s, p) => s + p.durationDays, 0);
+    const endDate = phases[phases.length - 1].endDate;
+    const confidenceDates = computeConfidenceDates(
+      new Date(endDate),
+      totalDays,
+      projectConfig,
+    );
+
     const existingHuman = state.releaseTimelines.filter((r) => r.releaseType === "human");
+    const num = existingHuman.length + 1;
 
-    if (instantStories.length > 0) {
-      const totalSP = instantStories.reduce((sum, s) => sum + (s.storyPoints || 0), 0);
-      const lastEnd = existingInstant.length > 0
-        ? new Date(existingInstant[existingInstant.length - 1].endDate)
-        : new Date();
-      const startDate = lastEnd > new Date() ? lastEnd : new Date();
-      const phases = computeInstantPhases(totalSP, startDate);
-      const num = existingInstant.length + 1;
-      newReleases.push({
-        id: uuid(),
-        name: `R-${num} Instant`,
-        storyIds: instantStories.map((s) => s.id),
-        releaseType: "instant",
-        totalStoryPoints: totalSP,
-        phases,
-        startDate: phases[0].startDate,
-        endDate: phases[phases.length - 1].endDate,
-        status: "upcoming",
-        createdAt: new Date().toISOString(),
-      });
-    }
+    const release: ReleaseTimeline = {
+      id: uuid(),
+      name: `R-${num} Human`,
+      storyIds,
+      releaseType: "human",
+      totalStoryPoints: totalSP,
+      phases,
+      startDate: devStartDate.toISOString(),
+      endDate,
+      status: "upcoming",
+      createdAt: new Date().toISOString(),
+      confidenceDates,
+      mepDeadline,
+      alertDatePast: alertPast,
+    };
 
-    if (humanStories.length > 0) {
-      const totalSP = humanStories.reduce((sum, s) => sum + (s.storyPoints || 0), 0);
-      const lastEnd = existingHuman.length > 0
-        ? new Date(existingHuman[existingHuman.length - 1].endDate)
-        : new Date();
-      const startDate = lastEnd > new Date() ? lastEnd : new Date();
-      const phases = computeHumanPhases(totalSP, startDate);
-      const num = existingHuman.length + 1;
-      newReleases.push({
-        id: uuid(),
-        name: `R-${num} Human`,
-        storyIds: humanStories.map((s) => s.id),
-        releaseType: "human",
-        totalStoryPoints: totalSP,
-        phases,
-        startDate: phases[0].startDate,
-        endDate: phases[phases.length - 1].endDate,
-        status: "upcoming",
-        createdAt: new Date().toISOString(),
-      });
-    }
-
-    if (newReleases.length > 0) {
-      set((s) => ({ releaseTimelines: [...s.releaseTimelines, ...newReleases] }));
-    }
+    set((s) => ({ releaseTimelines: [...s.releaseTimelines, release] }));
   },
   updateReleaseTimeline: (id, updates) => {
     set((state) => ({
@@ -823,6 +874,27 @@ export const useStore = create<AppState>((set, get) => ({
       expandedReleaseId: state.expandedReleaseId === id ? null : state.expandedReleaseId,
     }));
   },
+
+  // Project config & team
+  projectConfig: { ...defaultProjectConfig },
+  setProjectConfig: (config) =>
+    set((state) => ({
+      projectConfig: { ...state.projectConfig, ...config },
+    })),
+  teamMembers: [],
+  addTeamMember: (member) =>
+    set((state) => ({ teamMembers: [...state.teamMembers, member] })),
+  updateTeamMember: (id, updates) =>
+    set((state) => ({
+      teamMembers: state.teamMembers.map((m) =>
+        m.id === id ? { ...m, ...updates } : m
+      ),
+    })),
+  removeTeamMember: (id) =>
+    set((state) => ({
+      teamMembers: state.teamMembers.filter((m) => m.id !== id),
+    })),
+  setTeamMembers: (members) => set({ teamMembers: members }),
 
   // Shared filters (Prioritize & Ship)
   filterEpic: "all",
@@ -882,6 +954,8 @@ export const useStore = create<AppState>((set, get) => ({
       expandedReleaseId: null,
       filterEpic: "all",
       filterStatus: "all",
+      projectConfig: { ...defaultProjectConfig },
+      teamMembers: [],
       _persistMsgCreate: null,
       _persistMsgUpdate: null,
       _persistMsgLink: null,
